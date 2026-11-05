@@ -89,6 +89,7 @@ export async function save(input: SaveInput): Promise<{ track: Track; unchanged:
     const result = await db().runTransaction(async tx => {
       const [op, current] = await Promise.all([tx.get(operation), tx.get(ref)]);
       if (op.get('lease') !== lease || op.get('status') !== 'pending') throw new HttpError(409, 'SAVE_EXPIRED', 'This save expired. Try again.');
+      if (input.id && !current.exists) throw new HttpError(404, 'NOT_FOUND', 'This sound was deleted.');
       if (current.exists && current.get('versionId') !== expectedVersion) throw new HttpError(409, 'VERSION_CONFLICT', 'This track changed. Reload it before saving.');
       const result = { track, unchanged: false };
       if (current.exists && current.get('objectPath') !== track.objectPath) queueRetiredAudio(tx, uid, id, current.get('objectPath'));
@@ -116,6 +117,22 @@ export async function save(input: SaveInput): Promise<{ track: Track; unchanged:
 function queueRetiredAudio(tx: Transaction, uid: string, trackId: string, objectPath: string) {
   const ref = db().doc(`users/${uid}/saves/gc-${fingerprint(objectPath)}`);
   tx.set(ref, { status: 'retired', trackId, userId: uid, objectPath });
+}
+
+export async function removeTrack(uid: string, id: string, expectedVersion: string) {
+  const ref = tracks(uid).doc(id);
+  await db().runTransaction(async tx => {
+    const current = await tx.get(ref);
+    // Retrying a completed deletion is safe, including a lost HTTP response.
+    if (!current.exists) return;
+    if (current.get('versionId') !== expectedVersion) throw new HttpError(409, 'VERSION_CONFLICT', 'This sound changed. Refresh the library before deleting it.');
+    queueRetiredAudio(tx, uid, id, current.get('objectPath'));
+    tx.delete(ref);
+  });
+  await cleanupRetiredAudioForTrack(uid, id);
+  const pending = await db().collection('users').doc(uid).collection('saves')
+    .where('status', '==', 'retired').where('trackId', '==', id).limit(1).get();
+  if (!pending.empty) throw new HttpError(503, 'CLEANUP_PENDING', 'Sample removed. Audio cleanup is pending. Retry to finish freeing space.');
 }
 
 async function deleteRetiredAudio(ref: DocumentReference) {

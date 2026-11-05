@@ -174,6 +174,60 @@ test('direct database reads and storage listing are denied by security rules', a
   const firestore = await fetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/${project}/databases/(default)/documents/users/${uid}`, { headers: { Authorization: `Bearer ${token}` } }); assert.equal(firestore.status, 403);
   const storage = await fetch(`http://${process.env.FIREBASE_STORAGE_EMULATOR_HOST}/v0/b/${project}.appspot.com/o`, { headers: { Authorization: `Bearer ${token}` } }); assert.equal(storage.status, 403);
 });
+test('delete requires authorization and current version, removes exact audio and record, and can be retried', async () => {
+  const created = await put('Disposable deletion test'); const track = created.body;
+  const ref = db().doc(`users/${uid}/tracks/${track.id}`); const path = (await ref.get()).get('objectPath');
+  const init = { method: 'DELETE', headers: { 'If-Match': track.versionId } };
+  assert.equal((await request(`/tracks/${track.id}`, init, null)).status, 401);
+  assert.equal((await request(`/tracks/${track.id}`, init, strangerToken)).status, 403);
+  assert.equal((await request(`/tracks/${track.id}`, init, otherToken)).status, 204);
+  assert.equal((await ref.get()).exists, true); assert.equal((await getStorage().bucket().file(path).exists())[0], true);
+  assert.equal((await request(`/tracks/${track.id}`, { method: 'DELETE' })).status, 400);
+  assert.equal((await request(`/tracks/${track.id}`, { method: 'DELETE', headers: { 'If-Match': randomUUID() } })).status, 409);
+  assert.equal((await request(`/tracks/${track.id}`, init)).status, 204);
+  assert.equal((await ref.get()).exists, false); assert.equal((await getStorage().bucket().file(path).exists())[0], false);
+  assert.equal((await request(`/tracks/${track.id}`)).status, 404);
+  assert.equal((await request('/tracks?title=Disposable%20deletion%20test')).body.items.length, 0);
+  assert.equal((await request(`/tracks/${track.id}`, init)).status, 204);
+  const preflight = await fetch(`${base}/v1/tracks/${track.id}`, { method: 'OPTIONS', headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'DELETE' } });
+  assert.equal(preflight.status, 204); assert.match(preflight.headers.get('access-control-allow-methods')!, /DELETE/);
+});
+
+test('failed storage deletion stays queued and a delete retry frees the file', async () => {
+  const track = (await put('Deletion retry test')).body;
+  const ref = db().doc(`users/${uid}/tracks/${track.id}`); const path = (await ref.get()).get('objectPath');
+  const failure = mock.method(Object.getPrototypeOf(getStorage().bucket().file(path)), 'delete', async () => { throw new Error('temporary storage failure'); });
+  const init = { method: 'DELETE', headers: { 'If-Match': track.versionId } };
+  try {
+    const result = await request(`/tracks/${track.id}`, init); assert.equal(result.status, 503); assert.equal(result.body.error.code, 'CLEANUP_PENDING');
+    assert.equal((await ref.get()).exists, false); assert.equal((await getStorage().bucket().file(path).exists())[0], true);
+  } finally { failure.mock.restore(); }
+  assert.equal((await request(`/tracks/${track.id}`, init)).status, 204);
+  assert.equal((await getStorage().bucket().file(path).exists())[0], false);
+});
+
+test('deleting during replacement cannot resurrect a track; abandoned upload is reclaimed', async () => {
+  const track = (await put('Delete race test')).body;
+  const ref = db().doc(`users/${uid}/tracks/${track.id}`); const oldPath = (await ref.get()).get('objectPath');
+  let uploaded!: () => void; let release!: () => void;
+  const waiting = new Promise<void>(resolve => { uploaded = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const prototype = Object.getPrototypeOf(getStorage().bucket().file(oldPath)); const originalSave = prototype.save;
+  let newPath = '';
+  const paused = mock.method(prototype, 'save', async function (this: { name: string }, ...args: unknown[]) {
+    await originalSave.apply(this, args); newPath = this.name; uploaded(); await gate;
+  });
+  const update = put('Racing crop', { id: track.id, version: track.versionId, audio: wav(330) });
+  try {
+    await waiting;
+    assert.equal((await request(`/tracks/${track.id}`, { method: 'DELETE', headers: { 'If-Match': track.versionId } })).status, 204);
+  } finally { release(); paused.mock.restore(); }
+  assert.equal((await update).status, 404); assert.equal((await ref.get()).exists, false);
+  await cleanupIncompleteSaves();
+  assert.equal((await getStorage().bucket().file(oldPath).exists())[0], false);
+  assert.equal((await getStorage().bucket().file(newPath).exists())[0], false);
+});
+
 test('CORS rejects unexpected origins and logout revokes old tokens', async () => {
   assert.equal((await request('/auth/me', { headers: { Origin: 'https://untrusted.example' } })).status, 403);
   // Firebase timestamps revocation in whole seconds; make this token older than the revocation instant.

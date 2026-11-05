@@ -3,7 +3,7 @@ import Busboy from 'busboy';
 import { getAuth } from 'firebase-admin/auth';
 import { logger } from 'firebase-functions';
 import { HttpError, inspectAudio, MAX_BYTES, normalizeTitle, requireUuid, validateDetails } from './domain.js';
-import { db, getTrack, page, present, save } from './store.js';
+import { db, getTrack, page, present, save, removeTrack } from './store.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -13,7 +13,7 @@ app.use((req, res, next) => {
   if (origin && !allowed.includes(origin)) return res.status(403).json({ error: { code: 'ORIGIN', message: 'Origin not allowed.' } });
   if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.vary('Origin'); }
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, If-Match');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -44,6 +44,10 @@ app.get('/v1/tracks', async (req, res) => {
   res.json(await page(res.locals.user.id, req.query.cursor, normalizeTitle(req.query.title)));
 });
 app.get('/v1/tracks/:id', async (req, res) => res.json(await present(await getTrack(res.locals.user.id, requireUuid(req.params.id)))));
+app.delete('/v1/tracks/:id', async (req, res) => {
+  await removeTrack(res.locals.user.id, requireUuid(req.params.id), requireUuid(req.get('If-Match')?.replace(/^"|"$/g, '')));
+  res.sendStatus(204);
+});
 
 async function multipart(req: Request): Promise<{ fields: Record<string, string>; file?: { buffer: Buffer; filename: string } }> {
   if (!req.is('multipart/form-data')) throw new HttpError(415, 'MULTIPART_REQUIRED', 'Submit audio and details as multipart form data.');

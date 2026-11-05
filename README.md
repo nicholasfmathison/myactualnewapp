@@ -1,6 +1,6 @@
 # Soundroom
 
-A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, inline renaming, audio cropping, and sampler-style Tune to C. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
+A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, inline renaming, audio cropping, sampler-style Tune to C, and sample deletion. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
 
 ## Run locally in Git Bash
 
@@ -51,6 +51,7 @@ All routes except `GET /v1/health` require `Authorization: Bearer FIREBASE_ID_TO
 | `GET /v1/tracks/:id` | Current track |
 | `POST /v1/tracks` | Create track |
 | `PUT /v1/tracks/:id` | Replace audio or update title |
+| `DELETE /v1/tracks/:id` | Delete sample and its audio |
 
 Save requests use multipart fields `title` (1–160 characters) and `file` (required for create; optional for update). Maximum file size is 10,000,000 bytes. Both save routes require a UUID `Idempotency-Key`; updates also require `If-Match` containing the current version UUID. Keep the same key when retrying an unchanged request. A `409 VERSION_CONFLICT` requires reloading the track; a `409 SAVE_IN_PROGRESS` means retry later. Failed/interrupted uploads are cleaned by a scheduled job before the same key can be retried.
 
@@ -78,6 +79,12 @@ Tuning uses the nearest C frequency divided by the measured frequency as a fixed
 
 Audio processing stays in the browser and the current backend stays on localhost emulators. No paid processing service, cloud deployment, or new dependency is needed. Tests cover low bass, detuned tones, strong harmonics, opposite-phase stereo, decaying bass tails, noise/unstable rejection, nearest-C math, and output limits. See [Web Audio playback rate](https://developer.mozilla.org/en-US/docs/Web/API/AudioBufferSourceNode/playbackRate).
 
+## Delete a sound
+
+The small **×** in the top-right of each card opens a short confirmation. Cancel leaves the sound untouched. Delete removes the track record and its audio file, then refreshes the library. This is permanent; there is no trash or retained audio history.
+
+The authenticated DELETE route requires the current version UUID in `If-Match`. A stale version returns 409. Deleting an already-absent track safely succeeds, so a lost response can be retried. The transaction removes metadata and durably queues the exact object path; storage deletion runs immediately. If cleanup fails, the API returns 503 CLEANUP_PENDING and the dialog offers Retry delete. The durable job also remains available to the existing cleanup worker. No storage listing is used. In-progress replacement saves cannot recreate a deleted track.
+
 ## Storage behavior
 
 Profiles live at `users/{UUID}`; tracks at `users/{UUID}/tracks/{trackUUID}`; each track holds only its current audio object reference. The bucket is private and the client cannot read/write Firestore directly.
@@ -96,4 +103,4 @@ See [Firebase setup](docs/firebase-setup.md) for billing, projects, account prov
 
 The workflow tests pushes and pull requests. With the spending policy approved and repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` deploys the production backend, then GitHub Pages. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
 
-Duration-preserving pitch shifting, recording, sharing, deletion, retention limits, and bulk import are outside v1.
+Duration-preserving pitch shifting, recording, sharing, retention limits, and bulk import are outside v1.
