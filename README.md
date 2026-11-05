@@ -117,10 +117,10 @@ In a future cloud rollout, disable bucket object versioning and soft-delete rete
 
 ## Deployment
 
-**Currently local-only:** cloud deployment is disabled. The future spending target is USD 10/month combined across dev and production; no Google budget or hard cap has been installed. The checked-in spending policy blocks setup/deployment until the owner explicitly approves cloud spending and safeguards are verified.
+**Backend currently local-only:** Firebase deployment is disabled. Main can publish the static frontend to GitHub Pages without enabling Firebase or billing. Without a deployed/configured backend the public site shows the setup screen; online login and audio storage are unavailable. The future spending target is USD 10/month combined across dev and production; no Google budget or hard cap has been installed. The checked-in spending policy blocks Firebase setup/deployment until the owner explicitly approves cloud spending and safeguards are verified.
 
 See [Firebase setup](docs/firebase-setup.md) for billing, projects, account provisioning, and GitHub OIDC configuration. **Live cloud deployment requires that setup; an emulator test is not proof of a live Firebase deployment.**
 
-The workflow tests pushes and pull requests. With the spending policy approved and repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` deploys the production backend, then GitHub Pages. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
+The workflow tests pushes and pull requests. Main publishes GitHub Pages after successful checks, even while `FIREBASE_READY=false`; dev never publishes Pages. With the spending policy approved and repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` must deploy the production backend successfully before publishing the connected frontend. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Its `deployment.json` identifies the exact deployed main commit and whether the backend was enabled. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
 
 Duration-preserving pitch shifting, sharing, retention limits, and bulk import are outside v1.
