@@ -1,6 +1,6 @@
 # Soundroom
 
-A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, inline renaming, and audio cropping. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
+A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, inline renaming, audio cropping, and sampler-style Tune to C. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
 
 ## Run locally in Git Bash
 
@@ -54,11 +54,11 @@ All routes except `GET /v1/health` require `Authorization: Bearer FIREBASE_ID_TO
 
 Save requests use multipart fields `title` (1–160 characters) and `file` (required for create; optional for update). Maximum file size is 10,000,000 bytes. Both save routes require a UUID `Idempotency-Key`; updates also require `If-Match` containing the current version UUID. Keep the same key when retrying an unchanged request. A `409 VERSION_CONFLICT` requires reloading the track; a `409 SAVE_IN_PROGRESS` means retry later. Failed/interrupted uploads are cleaned by a scheduled job before the same key can be retried.
 
-Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim editor; requesting the track refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
+Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim or tuning editor; requesting the track refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
 
 ## Trim audio
 
-Choose the scissors button on a sound card, or **Trim audio & inspect waveform** when adding/replacing audio. The editor uses a single grayscale Guided layout with a waveform, time grid, preview and a short gesture hint. There is no layout selector or Start/Keep/End summary panel. Drag the thick handles to trim; each has a 44 px grab target. Focus a handle and use arrow keys for 1 ms steps (Shift for 10 ms), or Home/End to reach the bounds.
+Choose the scissors button on a sound card, or **Crop audio** when adding audio. The editor uses a single grayscale Guided layout with a waveform, time grid, preview and a short gesture hint. There is no layout selector or Start/Keep/End summary panel. Drag the thick handles to trim; each has a 44 px grab target. Focus a handle and use arrow keys for 1 ms steps (Shift for 10 ms), or Home/End to reach the bounds.
 
 Two fingers on opposite handles can adjust both ends together. Pinch elsewhere on the waveform or use a trackpad pinch to zoom; drag the waveform to pan when zoomed. **Fit whole sound** appears only while zoomed. The filled waveform uses actual sample extrema, keeping brief transients visible without stereo phase cancellation.
 
@@ -67,6 +67,16 @@ Two fingers on opposite handles can adjust both ends together. Pinch elsewhere o
 Mono and stereo WAV/MP3 inputs are decoded locally using Web Audio. Trims export 16-bit PCM WAV, including MP3 input, without normalization, fades or pitch changes. Cut boundaries round to the nearest decoded sample. Existing tracks use their recorded sample rate; newly selected files use the browser audio context's sample rate. Output must fit the existing 10 MB limit. Only the current sound is retained. A successful replacement queues the old object for deletion; no saved history is created. The audio tests check RMS/peak math, stereo preservation, sample boundaries, WAV metadata and output limits.
 
 Web Audio references: [decoding and resampling](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/decodeAudioData), [bounded playback](https://developer.mozilla.org/en-US/docs/Web/API/AudioBufferSourceNode/start).
+
+## Tune to C
+
+Choose **Tune to C** on a card. The compact editor shows the detected note and nearest C octave, **Preview**, and **Save**. Nothing is written until Save. Closing the editor discards the preview. Already-tuned sounds (within 3 cents) cannot be saved again unnecessarily; inconclusive sounds show “No clear, stable pitch found.”
+
+Detection runs in a local Web Worker using YIN-style normalized difference and pitch agreement across up to 16 windows per channel. Channels are analyzed separately to avoid stereo phase cancellation. A low-pass filter precedes analysis downsampling. The detector targets stable, single-note material from 25–1800 Hz; noise, very short clips, changing notes, and complex chords can be inconclusive or ambiguous. This is a pitch estimate, not musical-key recognition or automatic correction of a pitch glide.
+
+Tuning uses the nearest C frequency divided by the measured frequency as a fixed playback-rate ratio. Like a sampler, tuning upward shortens the sample and tuning downward lengthens it; existing pitch movement remains. Web Audio renders the result locally at the original decoded sample rate and channel count. Preview plays the same PCM16 WAV samples that Save uploads, even for MP3 input. The 10 MB output limit is checked before rendering. Save uses the existing idempotent, concurrency-protected replacement API and retires the previous audio object; no history is retained.
+
+Audio processing stays in the browser and the current backend stays on localhost emulators. No paid processing service, cloud deployment, or new dependency is needed. Tests cover low bass, detuned tones, strong harmonics, opposite-phase stereo, decaying bass tails, noise/unstable rejection, nearest-C math, and output limits. See [Web Audio playback rate](https://developer.mozilla.org/en-US/docs/Web/API/AudioBufferSourceNode/playbackRate).
 
 ## Storage behavior
 
@@ -86,4 +96,4 @@ See [Firebase setup](docs/firebase-setup.md) for billing, projects, account prov
 
 The workflow tests pushes and pull requests. With the spending policy approved and repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` deploys the production backend, then GitHub Pages. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
 
-Pitch detection/shifting, recording, sharing, deletion, retention limits, and bulk import are outside v1.
+Duration-preserving pitch shifting, recording, sharing, deletion, retention limits, and bulk import are outside v1.
