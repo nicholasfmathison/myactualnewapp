@@ -73,7 +73,7 @@ export function TrimEditor({ track, file, close, apply }: { track?: Track; file?
     catch (err) { setError(err instanceof Error ? err.message : 'Could not trim this audio.'); }
   }
 
-  return <Modal title="Trim" subtitle="" wide close={close} neutral>
+  return <Modal title="Trim" subtitle="" wide close={close} neutral hideTitle>
     {loading && <p role="status" className="py-16 text-center text-sm text-neutral-400">Loading waveform…</p>}
     {error && <Notice>{error}</Notice>}
     {audio && <div className="space-y-5">
