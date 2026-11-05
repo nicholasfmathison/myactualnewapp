@@ -69,7 +69,9 @@ The audio test suite checks partial-block capture, automatic limits, permission 
 
 ## Appearance
 
-The interface uses neutral grays and locally bundled **Redaction 50** (Regular, Bold, Italic), by the [Redaction Project](https://github.com/jeremymickel/Redaction). Fonts are served from the app itself, with no external font requests. The original SIL Open Font License is included in `public/fonts/OFL.txt`.
+The interface uses neutral grays with red recording controls. **Fonts** beside Record opens five live type previews: **DM Sans** (default), **Inter**, **Manrope**, **Plus Jakarta Sans**, and **Geist**. Choose one to apply it throughout the interface; Done returns to the library. The selection is remembered locally in this browser.
+
+The five variable font packages are bundled through [Fontsource](https://fontsource.org/) and served by the app, with no external font requests. Their OFL notices are included in `public/fonts/*-LICENSE.txt`. The previously used Redaction 50 assets and original license remain in `public/fonts/` but are no longer loaded by the interface.
 
 ## Trim audio
 

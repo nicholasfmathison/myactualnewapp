@@ -22,7 +22,7 @@ export function RecordingInput({ file, disabled, change, capturing }: { file?: F
   const active = phase !== 'idle';
   return <div className="space-y-4">
     <div className="flex flex-col items-center rounded-xl bg-neutral-100 px-5 py-7">
-      <button type="button" className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800 text-white transition-colors hover:bg-neutral-700" disabled={disabled || phase === 'permission' || phase === 'stopping'} aria-label={phase === 'recording' ? 'Stop recording' : file ? 'Record again' : 'Start recording'} onClick={() => { if (phase === 'recording') { setPhase('stopping'); recorder.current?.stop(); } else start(); }}>
+      <button type="button" className="record-button flex h-16 w-16 items-center justify-center rounded-full text-white transition-colors" disabled={disabled || phase === 'permission' || phase === 'stopping'} aria-label={phase === 'recording' ? 'Stop recording' : file ? 'Record again' : 'Start recording'} onClick={() => { if (phase === 'recording') { setPhase('stopping'); recorder.current?.stop(); } else start(); }}>
         {phase === 'recording' ? <span className="h-5 w-5 rounded-sm bg-white" /> : <Symbol name="mic" className="!h-7 !w-7" />}
       </button>
       <p role="status" className="mt-3 text-sm text-neutral-600">{phase === 'permission' ? 'Allow microphone access…' : phase === 'stopping' ? 'Preparing audio…' : phase === 'recording' ? 'Recording' : file ? 'Record again' : 'Start recording'}</p>
