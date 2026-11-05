@@ -77,7 +77,7 @@ export function TrimEditor({ track, file, close, apply }: { track?: Track; file?
     {loading && <p role="status" className="py-16 text-center text-sm text-neutral-400">Loading waveform…</p>}
     {error && <Notice>{error}</Notice>}
     {audio && <div className="space-y-5">
-      <p className="truncate text-xs text-neutral-400">{filename.current}</p>
+      <p className="truncate pr-12 text-xs text-neutral-400">{filename.current}</p>
       <TrimWaveform audio={audio} start={start} end={end} playhead={playhead} change={changeEdge} />
       <p className="text-center text-xs text-neutral-400">Drag the handles. Pinch to zoom. Drag the waveform to move.</p>
       {size > 10_000_000 && <Notice>The selected WAV exceeds 10 MB. Keep a shorter range before applying.</Notice>}
