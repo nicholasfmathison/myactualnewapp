@@ -60,9 +60,11 @@ Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `ver
 
 ## Trim audio
 
-Choose the scissors button on a sound card, or **Trim audio & inspect waveform** when adding/replacing audio. Drag the start/end markers or enter seconds in 0.001-second increments. **Preview selection** plays only the kept range. **Apply trim** prepares replacement audio; **Save version** commits it through the existing versioned API. Cancelling does not save a version.
+Choose the scissors button on a sound card, or **Trim audio & inspect waveform** when adding/replacing audio. Three grayscale layouts are selectable without changing the crop: **1 Minimal** (default: waveform, handles and Apply), **2 Simple** (adds endpoint times and preview), and **3 Guided** (adds a time grid, start/keep/end readouts and a short gesture hint). Drag the thick handles to trim; each has a 44 px grab target. Focus a handle and use arrow keys for 1 ms steps (Shift for 10 ms), or Home/End to reach the bounds.
 
-The editor shows a filled, sample-based waveform centered on zero, with a time grid and dimmed regions outside the crop. Zoomed-out views retain positive/negative sample extrema so brief transients stay visible; close zoom reveals individual oscillations. Stereo channels are combined by extrema, not averaged, to avoid phase cancellation. Use the 20 ms zoom window and **Inspect (ms)** for fine inspection. Signal level (RMS) and peak percentages are measured per millisecond relative to digital full scale; they are not physical or perceptually weighted loudness. There is no decibel chart.
+Two fingers on opposite handles can adjust both ends together. Pinch elsewhere on the waveform or use a trackpad pinch to zoom; drag the waveform to pan when zoomed. **Fit whole sound** appears only while zoomed. The filled waveform uses actual sample extrema, keeping brief transients visible without stereo phase cancellation.
+
+**Apply trim** prepares replacement audio; **Save version** commits it through the existing versioned API. Closing without saving does not publish a version.
 
 Mono and stereo WAV/MP3 inputs are decoded locally using Web Audio. Trims export 16-bit PCM WAV, including MP3 input, without normalization, fades or pitch changes. Cut boundaries round to the nearest decoded sample. Existing tracks use their recorded sample rate; newly selected files use the browser audio context's sample rate, shown in the editor. Output must fit the existing 10 MB limit. Saved originals remain in version history; unsaved new uploads are not archived. The audio tests check RMS/peak math, stereo preservation, sample boundaries, WAV metadata and output limits.
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { millisecondLevels, waveformEnvelope, toDb, trimFrames, trimToWav, wavSize } from '../src/lib/audio-trim.ts';
+import { zoomAudioWindow } from '../src/lib/trim-viewport.ts';
 const requireBackend = createRequire(new URL('../functions/package.json', import.meta.url));
 const { parseBuffer } = await import(pathToFileURL(requireBackend.resolve('music-metadata')).href);
 const pcm = (sampleRate, ...channels) => ({ sampleRate, length: channels[0].length, numberOfChannels: channels.length, getChannelData: c => channels[c] });
@@ -67,4 +68,16 @@ test('waveform shows actual signed samples at close zoom and excludes outside sa
 test('waveform combines stereo extrema without cancelling opposite-phase samples', () => {
   const audio = pcm(1000, Float32Array.from([.5, .25]), Float32Array.from([-.5, -.25]));
   assert.deepEqual(waveformEnvelope(audio, 0, .002, 2).map(p => [p.min, p.max]), [[-.5, .5], [-.25, .25]]);
+});
+
+test('pinch zoom keeps the audio under the gesture anchor stationary', () => {
+  const next = zoomAudioWindow(4, 0, 4, .25, .5);
+  assert.deepEqual(next, { start: .5, span: 2 });
+  assert.equal(next.start + next.span * .25, 1);
+});
+test('pinch zoom clamps at whole sound, minimum detail and file boundaries', () => {
+  assert.deepEqual(zoomAudioWindow(4, 1, 1, .5, 100), { start: 0, span: 4 });
+  assert.equal(zoomAudioWindow(4, 0, 4, 0, .000001).span, .02);
+  assert.deepEqual(zoomAudioWindow(.01, 0, .01, .5, .1), { start: 0, span: .01 });
+  assert.deepEqual(zoomAudioWindow(4, 3, 1, 1, .5), { start: 3.5, span: .5 });
 });
