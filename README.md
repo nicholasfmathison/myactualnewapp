@@ -71,9 +71,11 @@ The audio test suite checks partial-block capture, automatic limits, permission 
 
 ## Appearance
 
-The interface uses neutral grays with red recording controls. **Fonts** beside Record opens five live type previews: **DM Sans** (default), **Inter**, **Manrope**, **Plus Jakarta Sans**, and **Geist**. Choose one to apply it throughout the interface; Done returns to the library. The selection is remembered locally in this browser.
+The interface uses **Manrope** throughout, neutral grays, and red recording controls. There is no font selector; earlier saved font choices are ignored.
 
-The five variable font packages are bundled through [Fontsource](https://fontsource.org/) and served by the app, with no external font requests. Their OFL notices are included in `public/fonts/*-LICENSE.txt`. The previously used Redaction 50 assets and original license remain in `public/fonts/` but are no longer loaded by the interface.
+Manrope is bundled through [Fontsource](https://fontsource.org/fonts/manrope) and served by the app, with no external font requests. Its OFL notice is included in `public/fonts/manrope-LICENSE.txt`. The previously used Redaction 50 assets and original license remain in `public/fonts/` but are not loaded by the interface.
+
+On the local development server, **Dev options** stays fixed at the bottom-right and opens upward. It links to the synthetic recording test, API health response, and Firebase emulator console. Click outside or press Escape to close it; arrow keys open it and focus its first link. These shortcuts are omitted from production builds.
 
 ## Trim audio
 
