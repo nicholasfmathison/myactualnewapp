@@ -65,8 +65,10 @@ Audio paths are `username/original-title--trackUUID/saveTimestamp--versionUUID.w
 
 ## Deployment
 
+**Currently local-only:** cloud deployment is disabled. The future spending target is USD 10/month combined across dev and production; no Google budget or hard cap has been installed. The checked-in spending policy blocks setup/deployment until the owner explicitly approves cloud spending and safeguards are verified.
+
 See [Firebase setup](docs/firebase-setup.md) for billing, projects, account provisioning, and GitHub OIDC configuration. **Live cloud deployment requires that setup; an emulator test is not proof of a live Firebase deployment.**
 
-The workflow tests pushes and pull requests. With repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` deploys the production backend, then GitHub Pages. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
+The workflow tests pushes and pull requests. With the spending policy approved and repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` deploys the production backend, then GitHub Pages. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
 
 Pitch detection/shifting, recording, sharing, deletion, retention limits, and bulk import are outside v1.

@@ -1,0 +1,8 @@
+{
+  "currency": "USD",
+  "monthlyTargetCombined": 10,
+  "environments": ["development", "production"],
+  "plannedAlertAmounts": [5, 8, 10],
+  "cloudDeploymentApproved": false,
+  "cloudSafeguardsInstalled": false
+}

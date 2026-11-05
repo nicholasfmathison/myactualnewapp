@@ -1,10 +1,22 @@
 # Firebase deployment setup
 
+## Current spending policy: local backend only
+
+The owner selected a **USD 10 monthly target across development and production combined**. This is a future safeguard target, not an installed Google budget or a guaranteed spending cap. See `config/spending-policy.json`.
+
+Keep both projects unlinked from billing and the GitHub repository variable `FIREBASE_READY=false`. The setup script and deployment workflow also enforce the checked-in policy before cloud setup/authentication. Local emulator development remains available and does not use billable Firebase resources. Do not change the approval flags or enable billing without fresh, explicit owner approval.
+
+Before any future cloud deployment, prepare a combined USD 10 budget with notifications at USD 5, 8, and 10; review service-specific spending caps and request quotas; verify the controls in Google Cloud; then obtain approval for the remaining exposure. These alerts and caps do not guarantee a USD 10 ceiling. Native service caps omit storage/database/build charges and can overshoot. Do not automatically disable project billing: that can endanger stored resources and requires separate approval. Installing cloud safeguards may itself require linking billing; obtain approval for that setup step before proceeding. Only mark safeguards installed after verifying them, and only mark deployment approved after the owner authorizes deployment.
+
+References: [Google spend caps](https://docs.cloud.google.com/billing/docs/how-to/budgets-spend-caps), [budget alerts](https://docs.cloud.google.com/billing/docs/how-to/budgets), [automatic billing shutdown limitations](https://docs.cloud.google.com/billing/docs/how-to/disable-billing-with-notifications).
+
+The remaining instructions are for a future approved cloud rollout, not authorization to run them now.
+
 Cloud deployment is gated until two real Firebase projects, billing, and GitHub OIDC are configured. Local emulator tests do not require billing. No cloud projects or live accounts are created by installing dependencies.
 
 ## 1. Sign in and enable billing
 
-Install the Google Cloud CLI from its official site. In Git Bash, run `gcloud auth login`, `gcloud auth application-default login`, and `npx firebase login`. Complete Google sign-in yourself. Create a billing account in Google Cloud Billing, then get its ID with `gcloud billing accounts list`. Do not paste credentials, passwords, or payment details into chat or repository files.
+Install the Google Cloud CLI from its official site. In Git Bash, run `gcloud auth login --update-adc` and complete Google sign-in yourself. This also creates Application Default Credentials, which the Firebase CLI uses automatically; a separate Firebase CLI login is unnecessary. Create a billing account in Google Cloud Billing, then get its ID with `gcloud billing accounts list`. Do not paste credentials, passwords, or payment details into chat or repository files.
 
 Pick two globally unique project IDs. The following commands create/link resources and billing; substitute the actual IDs and billing account:
 

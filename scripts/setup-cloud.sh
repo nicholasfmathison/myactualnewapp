@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run from the repository root in Git Bash after signing in to gcloud and Firebase.
+# Run from the repository root in Git Bash after gcloud auth login --update-adc.
 set -euo pipefail
+node "$(dirname "$0")/check-cloud-approval.mjs"
 ENVIRONMENT="${1:?Usage: bash scripts/setup-cloud.sh development|production PROJECT_ID BILLING_ACCOUNT_ID}"
 PROJECT_ID="${2:?Missing project ID}"
 BILLING_ACCOUNT="${3:?Missing billing account ID}"
@@ -11,7 +12,7 @@ BRANCH=dev
 if [[ "$ENVIRONMENT" == production ]]; then BRANCH=main; fi
 REPOSITORY=nicholasfmathison/myactualnewapp
 command -v gcloud >/dev/null
-npx firebase login:list
+gcloud auth list --filter=status:ACTIVE --format='value(account)'
 if ! gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1; then
   gcloud projects create "$PROJECT_ID" --name="Soundroom $ENVIRONMENT"
 fi

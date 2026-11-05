@@ -66,6 +66,8 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             functions/package-lock.json
+      - name: Enforce local-only spending policy
+        run: node scripts/check-cloud-approval.mjs
       - name: Authenticate with short-lived Google credentials
         uses: google-github-actions/auth@v3
         with:
