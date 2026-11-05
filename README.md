@@ -1,64 +1,72 @@
-# My Actual New App
+# Soundroom
 
-An interactive starter with a live headline editor, three color themes, a detail switch, and a momentum counter. Changes live in React state and reset when the page reloads. No backend or account is required.
+A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, and immutable saved-version history. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
 
-## Stack
+## Run locally in Git Bash
 
-- React 19 with reusable `.tsx` components
-- TypeScript 5.8 (strict mode)
-- Tailwind CSS 3
-- Vite and npm
-
-Chart.js, Three.js, Zustand, and GrowthBook are intentionally not installed.
-
-## Run locally
-
-Use Node.js 26.13.0 (the version in `.nvmrc`) and npm. In Git Bash, from this repository:
+Install Node.js 22 and Java 21 for Firebase's emulators. The frontend also runs on the installed Node 26, but use Node 22 for backend development and emulator testing.
 
 ```bash
 npm ci
+npm ci --prefix functions
+npm run setup:local
+npm run build:api
+npm run emulators
+```
+
+In a second terminal:
+
+```bash
+npm run seed:local
 npm run dev
 ```
 
-Open http://localhost:5173/myactualnewapp/. Vite updates the browser as you edit `src/`.
+Open http://localhost:5173/myactualnewapp/. Sign in with the **local-only** test account `demo@example.test` / `Soundroom-local-only!`. It exists only in the emulators. Emulator data is temporary and resets on restart; do not use it as permanent storage for your recordings. The emulator console is at http://127.0.0.1:4000/.
+
+Generated environment files, credentials, emulator logs, dependencies, and build output are ignored by Git. Local testing never uploads audio to a real Firebase project.
+
+## Validation
 
 ```bash
-npm run typecheck  # Check types without building
-npm run build      # Type-check and build into dist/
-npm run preview    # Serve the production build on port 4173
+npm run check
+npm run build
+npm run build:api
+# Stop separately running emulators before this command:
+npm run test:integration
 ```
 
-## Structure
+The integration suite uses real Auth, Firestore, and Storage emulators plus an HTTP server running the same Express API. Tests generate their own WAV and MP3 fixtures. It covers authorization, file validation, signed-link emulation, saved history, retries, concurrency, pagination, cleanup, and direct-access denial. Emulators do not enforce production composite-index requirements or verify cloud IAM: those need deployment smoke tests.
 
-```text
-src/App.tsx                   Page layout and resource cards
-src/components/Playground.tsx Interactive preview and controls
-src/components/Icon.tsx       Shared SVG icons
-src/index.css                 Tailwind layers and global styles
-.github/workflows/deploy.yml  Build and deployment from main
-```
+## API
 
-## GitHub Pages
+All routes except `GET /v1/health` require `Authorization: Bearer FIREBASE_ID_TOKEN` for an enabled, administratively provisioned UUID account. Login, reset, and refresh use Firebase Authentication's SDK/endpoints. The app has no signup interface and never stores password hashes in Firestore.
 
-Published address: https://nicholasfmathison.github.io/myactualnewapp/
+| Route | Result |
+| --- | --- |
+| `GET /v1/auth/me` | Approved profile |
+| `POST /v1/auth/logout` | Revoke refresh tokens |
+| `GET /v1/tracks/latest?cursor=…` | Latest tracks, 24 per page |
+| `GET /v1/tracks?title=…&cursor=…` | Full normalized-title match, duplicates distinguished by ID |
+| `GET /v1/tracks/:id` | Current track |
+| `GET /v1/tracks/:id/versions?cursor=…` | History, 24 per page |
+| `GET /v1/tracks/:id/versions/:versionId` | Historical snapshot and fresh audio URL |
+| `POST /v1/tracks` | Create track |
+| `PUT /v1/tracks/:id` | Save a new version |
 
-The Pages source must be set to **GitHub Actions** in repository Settings → Pages. The repository must be public or use a GitHub plan that supports Pages for private repositories.
+Save requests use multipart fields `title` (1–160 characters), `description` (0–5,000), and `file` (required for create; optional for update). Maximum file size is 10,000,000 bytes. Both save routes require a UUID `Idempotency-Key`; updates also require `If-Match` containing the current version UUID. Keep the same key when retrying an unchanged request. A `409 VERSION_CONFLICT` requires reloading the track; a `409 SAVE_IN_PROGRESS` means retry later. Failed/interrupted uploads are cleaned by a scheduled job before the same key can be retried.
 
-Every push to `main` runs `npm ci`, checks TypeScript, builds the app, and deploys `dist/`. Both workflow jobs also require `refs/heads/main`, so a manual dispatch on another branch cannot deploy. The `github-pages` environment is restricted to the `main` branch when Pages is enabled.
+Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `description`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen; requesting a version refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
 
-Vite uses `/myactualnewapp/` as its base path so production assets load correctly at the project URL. If you rename the repository, update `vite.config.ts`.
+## Storage behavior
 
-## Development workflow
+Profiles live at `users/{UUID}`; tracks at `users/{UUID}/tracks/{trackUUID}`; immutable versions below each track. Exact paths are stored with each version. The bucket is private and the client cannot read/write Firestore directly.
 
-Work on `dev`, commit and push changes there, then merge into `main` when ready to publish:
+Audio paths are `username/original-title--trackUUID/saveTimestamp--versionUUID.wav` (or `.mp3`). Username and original folder slug remain fixed when a track is renamed. Changed explicit saves create versions; metadata-only saves share the same audio object; identical saves do nothing. No daily snapshots, bucket listings, offset paging, or full-library scans. Old versions are retained indefinitely. Pagination is a live view: after concurrent edits, refresh the list to see items moved to its beginning.
 
-```bash
-git switch dev
-git add .
-git commit -m "Describe the change"
-git push -u origin dev
-```
+## Deployment
 
-Open a pull request from `dev` into `main` to publish after review. A push to `dev` does not deploy.
+See [Firebase setup](docs/firebase-setup.md) for billing, projects, account provisioning, and GitHub OIDC configuration. **Live cloud deployment requires that setup; an emulator test is not proof of a live Firebase deployment.**
 
-The lockfile is committed for reproducible installs. Dependencies, build output, logs, local environment files, and editor caches are ignored. Never put secrets into frontend code or `VITE_` environment variables: those values are visible in the built website.
+The workflow tests pushes and pull requests. With repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` deploys the production backend, then GitHub Pages. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
+
+Pitch detection/shifting, recording, sharing, deletion, retention limits, and bulk import are outside v1.

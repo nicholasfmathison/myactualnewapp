@@ -1,0 +1,7 @@
+{
+  "functions": [{ "source": "functions", "codebase": "audio", "runtime": "nodejs22", "predeploy": ["npm --prefix functions run build"], "ignore": ["node_modules", ".git", "test", "*.log", ".env.local"] }],
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "storage": { "rules": "storage.rules" },
+  "hosting": { "public": "dist", "ignore": ["firebase.json", "**/.*", "**/node_modules/**"], "rewrites": [{ "source": "**", "destination": "/index.html" }], "headers": [{ "source": "**", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }, { "key": "Referrer-Policy", "value": "no-referrer" }] }] },
+  "emulators": { "auth": { "port": 9099 }, "firestore": { "port": 8080 }, "storage": { "port": 9199 }, "functions": { "port": 5001 }, "ui": { "enabled": true, "port": 4000 }, "singleProjectMode": true }
+}

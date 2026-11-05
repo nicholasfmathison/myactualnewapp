@@ -153,3 +153,14 @@ vite.config.ts.timestamp-*
 Thumbs.db
 .idea/
 *.local
+
+# Firebase generated files and private credentials
+.firebase/
+*-debug.log
+functions/lib/
+functions/.env*
+!.env.example
+!functions/.env.example
+*service-account*.json
+*-credentials.json
+gha-creds-*.json
