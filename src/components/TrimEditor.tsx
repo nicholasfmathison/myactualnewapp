@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type Track } from '../lib/api';
 import { trimToWav, wavSize } from '../lib/audio-trim';
-import { TrimWaveform, type TrimLayout } from './TrimWaveform';
+import { TrimWaveform } from './TrimWaveform';
 import { Modal, Notice } from './LibraryUI';
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 export function TrimEditor({ track, file, close, apply }: { track?: Track; file?: File; close: () => void; apply: (file: File) => void }) {
   const [audio, setAudio] = useState<AudioBuffer>();
-  const [layout, setLayout] = useState<TrimLayout>('minimal');
   const [start, setStart] = useState(0); const [end, setEnd] = useState(0);
   const [playing, setPlaying] = useState(false);
   const bounds = useRef({ start, end }); bounds.current = { start, end };
@@ -75,20 +74,15 @@ export function TrimEditor({ track, file, close, apply }: { track?: Track; file?
   }
 
   return <Modal title="Trim" subtitle="" wide close={close} neutral>
-    <div role="group" aria-label="Editor layout" className="mb-6 flex w-fit max-w-full gap-1 rounded-lg bg-neutral-100 p-1">
-      {(['minimal', 'simple', 'guided'] as const).map((option, i) => <button key={option} type="button" aria-pressed={layout === option} onClick={() => { stop(); setLayout(option); }} className={`rounded-md px-3 py-2 text-xs transition-colors focus-visible:outline-neutral-500 ${layout === option ? 'bg-white font-medium text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-800'}`}>{i + 1} {option === 'minimal' ? 'Minimal' : option === 'simple' ? 'Simple' : 'Guided'}</button>)}
-    </div>
     {loading && <p role="status" className="py-16 text-center text-sm text-neutral-400">Loading waveform…</p>}
     {error && <Notice>{error}</Notice>}
     {audio && <div className="space-y-5">
-      {layout === 'guided' && <p className="truncate text-xs text-neutral-400">{filename.current}</p>}
-      <TrimWaveform audio={audio} start={start} end={end} layout={layout} playhead={playhead} change={changeEdge} />
-      {layout === 'simple' && <div className="flex justify-between font-mono text-xs text-neutral-400"><span>{start.toFixed(3)}s</span><span>{end.toFixed(3)}s</span></div>}
-      {layout === 'guided' && <><div className="grid grid-cols-3 gap-3 rounded-lg bg-neutral-100 p-4 text-center"><div><p className="text-[10px] text-neutral-400">START</p><p className="mt-1 font-mono text-sm">{start.toFixed(3)}s</p></div><div><p className="text-[10px] text-neutral-400">KEEP</p><p className="mt-1 font-mono text-sm">{(end - start).toFixed(3)}s</p></div><div><p className="text-[10px] text-neutral-400">END</p><p className="mt-1 font-mono text-sm">{end.toFixed(3)}s</p></div></div><p className="text-center text-xs text-neutral-400">Drag the handles. Pinch to zoom. Drag the waveform to move.</p></>}
+      <p className="truncate text-xs text-neutral-400">{filename.current}</p>
+      <TrimWaveform audio={audio} start={start} end={end} playhead={playhead} change={changeEdge} />
+      <p className="text-center text-xs text-neutral-400">Drag the handles. Pinch to zoom. Drag the waveform to move.</p>
       {size > 10_000_000 && <Notice>The selected WAV exceeds 10 MB. Keep a shorter range before applying.</Notice>}
       <div className="flex items-center justify-end gap-3 pt-1">
-        {layout !== 'minimal' && <button type="button" className="mr-auto rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-neutral-100 focus-visible:outline-neutral-500" disabled={!valid} onClick={() => void preview()}>{playing ? 'Stop' : 'Preview'}</button>}
-        {layout === 'simple' && <span className="text-xs text-neutral-400">{(end - start).toFixed(3)}s kept</span>}
+        <button type="button" className="mr-auto rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-neutral-100 focus-visible:outline-neutral-500" disabled={!valid} onClick={() => void preview()}>{playing ? 'Stop' : 'Preview'}</button>
         <button type="button" className="rounded-lg bg-neutral-800 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 focus-visible:outline-neutral-500 disabled:!cursor-default" disabled={!valid || unchanged || size > 10_000_000} onClick={finish}>Apply trim</button>
       </div>
     </div>}

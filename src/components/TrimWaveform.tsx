@@ -2,14 +2,13 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { waveformEnvelope } from '../lib/audio-trim';
 import { zoomAudioWindow } from '../lib/trim-viewport';
 
-export type TrimLayout = 'minimal' | 'simple' | 'guided';
 type Edge = 'start' | 'end';
 type Contact = { x: number; y: number; edge?: Edge; offset: number; initialPan: number; initialX: number };
 const WIDTH = 900, LEFT = 24, RIGHT = 876, PLOT = RIGHT - LEFT;
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-export function TrimWaveform({ audio, start, end, layout, playhead, change }: {
-  audio: AudioBuffer; start: number; end: number; layout: TrimLayout; playhead?: number;
+export function TrimWaveform({ audio, start, end, playhead, change }: {
+  audio: AudioBuffer; start: number; end: number; playhead?: number;
   change: (edge: Edge, value: number) => void;
 }) {
   const total = audio.duration;
@@ -24,7 +23,6 @@ export function TrimWaveform({ audio, start, end, layout, playhead, change }: {
   const timeAt = (clientX: number) => viewport.start + fractionAt(clientX) * viewport.span;
   const x = (time: number) => LEFT + (time - viewport.start) / viewport.span * PLOT;
   const zoomed = viewport.span < total - 1e-9;
-  const dark = layout === 'simple';
   const waveform = useMemo(() => waveformEnvelope(audio, viewport.start, viewport.start + viewport.span, PLOT), [audio, viewport]);
   const y = (value: number) => 130 - clamp(value, -1, 1) * 100;
   const path = waveform.map((point, i) => `${i ? 'L' : 'M'}${x(point.time).toFixed(2)},${y(point.max).toFixed(2)}`).join(' ') + ' ' + [...waveform].reverse().map(point => `L${x(point.time).toFixed(2)},${y(point.min).toFixed(2)}`).join(' ') + ' Z';
@@ -89,17 +87,17 @@ export function TrimWaveform({ audio, start, end, layout, playhead, change }: {
 
   return <div className="space-y-3">
     {zoomed && <div className="flex justify-end"><button type="button" className="text-xs text-neutral-500 underline underline-offset-4" onClick={() => setViewport({ start: 0, span: total })}>Fit whole sound</button></div>}
-    <div ref={surface} className={`relative touch-none select-none overflow-hidden ${layout === 'minimal' ? 'rounded-lg bg-neutral-100' : dark ? 'rounded-2xl bg-neutral-800' : 'rounded-xl border border-neutral-200 bg-neutral-50'} ${zoomed ? 'cursor-grab active:cursor-grabbing' : ''}`}
+    <div ref={surface} className={`relative touch-none select-none overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 ${zoomed ? 'cursor-grab active:cursor-grabbing' : ''}`}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={event => { contacts.current.delete(event.pointerId); if (!contacts.current.size) { pinch.current = undefined; setActive(undefined); } }}>
       <svg viewBox={`0 0 ${WIDTH} 260`} className="block w-full" role="img" aria-label="Sound waveform">
         <defs><clipPath id="trim-wave-area"><rect x={LEFT} width={PLOT} height={260} /></clipPath></defs>
-        {layout === 'guided' && Array.from({ length: 17 }, (_, i) => <line key={i} x1={LEFT + i * PLOT / 16} x2={LEFT + i * PLOT / 16} y1={20} y2={240} stroke="#e5e5e5" />)}
-        <line x1={LEFT} x2={RIGHT} y1={130} y2={130} stroke={dark ? '#525252' : '#d4d4d4'} />
+        {Array.from({ length: 17 }, (_, i) => <line key={i} x1={LEFT + i * PLOT / 16} x2={LEFT + i * PLOT / 16} y1={20} y2={240} stroke="#e5e5e5" />)}
+        <line x1={LEFT} x2={RIGHT} y1={130} y2={130} stroke="#d4d4d4" />
         <g clipPath="url(#trim-wave-area)">
-          <path d={path} fill={dark ? '#e5e5e5' : '#737373'} stroke={dark ? '#e5e5e5' : '#737373'} strokeWidth={.6} />
-          <rect x={LEFT} width={clamp(x(start) - LEFT, 0, PLOT)} height={260} fill={dark ? '#171717' : '#fafafa'} opacity={.85} />
-          <rect x={clamp(x(end), LEFT, RIGHT)} width={clamp(RIGHT - x(end), 0, PLOT)} height={260} fill={dark ? '#171717' : '#fafafa'} opacity={.85} />
-          {playhead !== undefined && <line x1={x(playhead)} x2={x(playhead)} y1={20} y2={240} stroke={dark ? '#fff' : '#171717'} strokeWidth={2} />}
+          <path d={path} fill="#737373" stroke="#737373" strokeWidth={.6} />
+          <rect x={LEFT} width={clamp(x(start) - LEFT, 0, PLOT)} height={260} fill="#fafafa" opacity={.85} />
+          <rect x={clamp(x(end), LEFT, RIGHT)} width={clamp(RIGHT - x(end), 0, PLOT)} height={260} fill="#fafafa" opacity={.85} />
+          {playhead !== undefined && <line x1={x(playhead)} x2={x(playhead)} y1={20} y2={240} stroke="#171717" strokeWidth={2} />}
         </g>
       </svg>
       {(['start', 'end'] as const).map(edge => {
@@ -114,10 +112,10 @@ export function TrimWaveform({ audio, start, end, layout, playhead, change }: {
               event.preventDefault(); change(edge, event.key === 'Home' ? 0 : event.key === 'End' ? total : value + (['ArrowLeft', 'ArrowDown'].includes(event.key) ? -step : step));
             }
           }}>
-          <span className={`flex h-[84%] w-3.5 items-center justify-center rounded ${dark ? 'bg-neutral-100' : 'bg-neutral-600'} ${active === edge ? 'shadow-lg' : ''}`}><span className={`h-7 w-0.5 rounded ${dark ? 'bg-neutral-500' : 'bg-neutral-200'}`} /></span>
+          <span className={`flex h-[84%] w-3.5 items-center justify-center rounded bg-neutral-600 ${active === edge ? 'shadow-lg' : ''}`}><span className={`h-7 w-0.5 rounded bg-neutral-200`} /></span>
         </button>;
       })}
     </div>
-    {layout === 'guided' && <div className="flex justify-between px-1 font-mono text-[10px] text-neutral-400">{Array.from({ length: 5 }, (_, i) => <span key={i}>{(viewport.start + viewport.span * i / 4).toFixed(3)}s</span>)}</div>}
+    <div className="flex justify-between px-1 font-mono text-[10px] text-neutral-400">{Array.from({ length: 5 }, (_, i) => <span key={i}>{(viewport.start + viewport.span * i / 4).toFixed(3)}s</span>)}</div>
   </div>;
 }

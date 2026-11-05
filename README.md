@@ -60,7 +60,7 @@ Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `ver
 
 ## Trim audio
 
-Choose the scissors button on a sound card, or **Trim audio & inspect waveform** when adding/replacing audio. Three grayscale layouts are selectable without changing the crop: **1 Minimal** (default: waveform, handles and Apply), **2 Simple** (adds endpoint times and preview), and **3 Guided** (adds a time grid, start/keep/end readouts and a short gesture hint). Drag the thick handles to trim; each has a 44 px grab target. Focus a handle and use arrow keys for 1 ms steps (Shift for 10 ms), or Home/End to reach the bounds.
+Choose the scissors button on a sound card, or **Trim audio & inspect waveform** when adding/replacing audio. The editor uses a single grayscale Guided layout with a waveform, time grid, preview and a short gesture hint. There is no layout selector or Start/Keep/End summary panel. Drag the thick handles to trim; each has a 44 px grab target. Focus a handle and use arrow keys for 1 ms steps (Shift for 10 ms), or Home/End to reach the bounds.
 
 Two fingers on opposite handles can adjust both ends together. Pinch elsewhere on the waveform or use a trackpad pinch to zoom; drag the waveform to pan when zoomed. **Fit whole sound** appears only while zoomed. The filled waveform uses actual sample extrema, keeping brief transients visible without stereo phase cancellation.
 
