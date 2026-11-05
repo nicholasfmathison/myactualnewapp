@@ -59,7 +59,9 @@ Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `ver
 
 ## Record or import
 
-**Record** is the main library action. It opens a compact recording dialog; **Start recording** requests microphone permission. Stop, listen to the preview, optionally crop, give it a title, then **Save sound**. Nothing is uploaded before Save. Closing the dialog discards an unsaved take and releases the microphone, including when permission arrives after the dialog has closed.
+**Record** is the main library action. In the dialog, **hold the red microphone button to record, then release to stop**. Mouse, touch, and holding Space or Enter while the button is focused are supported. Listen to the preview, optionally crop, give it a title, then **Save sound**. Nothing is uploaded before Save. Releasing outside the button, an interrupted touch, losing focus, or switching tabs stops capture. Closing the dialog discards an unsaved take and releases the microphone.
+
+On first use, allow microphone access, then hold again if you released the button while permission was pending. A late permission response cannot start a recording after release or close.
 
 The small **Import audio** link in the recording dialog accepts WAV/MP3 files and uses the same preview/title/save flow. Import remains available if microphone permission is denied or no microphone is connected.
 

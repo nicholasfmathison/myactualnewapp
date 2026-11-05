@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local recording test</title></head><body>
 <div style="padding:8px;background:#ddd;color:#222">Local test microphone (synthetic 440 Hz; no hardware access).
-<label>Microphone response <select id="mode"><option value="tone">Tone</option><option value="denied">Denied</option><option value="missing">Missing</option></select></label>
+<label>Microphone response <select id="mode"><option value="tone">Tone</option><option value="delayed">Delayed permission</option><option value="denied">Denied</option><option value="missing">Missing</option></select></label>
 <span id="capture-status">Microphone idle</span></div><div id="root"></div>
 <script type="module">
 if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local development only');
@@ -8,6 +8,7 @@ Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: tr
   const mode = document.querySelector('#mode').value;
   if (mode === 'denied') throw new DOMException('Synthetic denial', 'NotAllowedError');
   if (mode === 'missing') throw new DOMException('Synthetic missing microphone', 'NotFoundError');
+  if (mode === 'delayed') { document.querySelector('#capture-status').textContent = 'Waiting for test permission'; await new Promise(resolve => setTimeout(resolve, 1200)); }
   const context = new AudioContext({sampleRate:48000}); await context.resume();
   const source = context.createOscillator(); source.frequency.value = 440;
   const gain = context.createGain(); gain.gain.value = .25;
