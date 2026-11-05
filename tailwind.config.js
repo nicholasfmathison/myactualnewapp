@@ -3,8 +3,8 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      fontFamily: { sans: ['Inter', 'Segoe UI', 'sans-serif'] },
-      colors: { ink: '#182620', paper: '#f7f8f4' },
+      fontFamily: { sans: ['Redaction 50', 'Georgia', 'serif'], serif: ['Redaction 50', 'Georgia', 'serif'], mono: ['Redaction 50', 'Georgia', 'serif'] },
+      colors: { ink: '#171717', paper: '#f5f5f5' },
     },
   },
   plugins: [],

@@ -1,6 +1,6 @@
 # Soundroom
 
-A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, inline renaming, audio cropping, sampler-style Tune to C, and sample deletion. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
+A private audio library with microphone recording, WAV/MP3 import, email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, inline renaming, audio cropping, sampler-style Tune to C, and sample deletion. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
 
 ## Run locally in Git Bash
 
@@ -57,6 +57,20 @@ Save requests use multipart fields `title` (1–160 characters) and `file` (requ
 
 Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim or tuning editor; requesting the track refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
 
+## Record or import
+
+**Record** is the main library action. It opens a compact recording dialog; **Start recording** requests microphone permission. Stop, listen to the preview, optionally crop, give it a title, then **Save sound**. Nothing is uploaded before Save. Closing the dialog discards an unsaved take and releases the microphone, including when permission arrives after the dialog has closed.
+
+The small **Import audio** link in the recording dialog accepts WAV/MP3 files and uses the same preview/title/save flow. Import remains available if microphone permission is denied or no microphone is connected.
+
+Recording uses a local AudioWorklet to capture mono PCM and exports 16-bit WAV at 48 kHz. Echo cancellation, noise suppression, and automatic gain are requested off. There is no live speaker monitoring. The audio thread stops at the 10,000,000-byte WAV limit (about 104 seconds), including if the page's UI is busy. Tracks and audio contexts are released on stop, error, or close. Microphone capture requires localhost or HTTPS and browser permission; only the selected microphone is captured, not system audio.
+
+The audio test suite checks partial-block capture, automatic limits, permission failure, and late permission cleanup. For a browser check without hardware access, open `/myactualnewapp/tests/recording-browser.html` on the Vite dev server: it substitutes a synthetic 440 Hz microphone and offers denial/missing-device modes. This test page is not part of the production build. Hardware microphone behavior still depends on browser and OS permissions.
+
+## Appearance
+
+The interface uses neutral grays and locally bundled **Redaction 50** (Regular, Bold, Italic), by the [Redaction Project](https://github.com/jeremymickel/Redaction). Fonts are served from the app itself, with no external font requests. The original SIL Open Font License is included in `public/fonts/OFL.txt`.
+
 ## Trim audio
 
 Choose the scissors button on a sound card, or **Crop audio** when adding audio. The editor uses a single grayscale Guided layout with a waveform, time grid, preview and a short gesture hint. There is no layout selector or Start/Keep/End summary panel. Drag the thick handles to trim; each has a 44 px grab target. Focus a handle and use arrow keys for 1 ms steps (Shift for 10 ms), or Home/End to reach the bounds.
@@ -103,4 +117,4 @@ See [Firebase setup](docs/firebase-setup.md) for billing, projects, account prov
 
 The workflow tests pushes and pull requests. With the spending policy approved and repository variable `FIREBASE_READY=true`, `dev` deploys to a separate Firebase project and preview website; `main` deploys the production backend, then GitHub Pages. Production remains https://nicholasfmathison.github.io/myactualnewapp/. Each environment is isolated through its Firebase project and branch-bound deployment identity. No long-lived deployment key is required.
 
-Duration-preserving pitch shifting, recording, sharing, retention limits, and bulk import are outside v1.
+Duration-preserving pitch shifting, sharing, retention limits, and bulk import are outside v1.
