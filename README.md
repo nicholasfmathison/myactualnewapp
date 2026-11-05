@@ -1,6 +1,6 @@
 # Soundroom
 
-A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, and immutable saved-version history. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
+A private WAV/MP3 library with email/password login, 24-at-a-time browsing, exact-title search, playback, downloads, inline renaming, and audio cropping. Built with React 19, TypeScript 5.8, Tailwind CSS 3, Firebase Authentication, Firestore, Cloud Storage, and Node.js 22 Cloud Functions.
 
 ## Run locally in Git Bash
 
@@ -36,7 +36,7 @@ npm run test:audio
 npm run test:integration
 ```
 
-The integration suite uses real Auth, Firestore, and Storage emulators plus an HTTP server running the same Express API. Tests generate their own WAV and MP3 fixtures. It covers authorization, file validation, signed-link emulation, saved history, retries, concurrency, pagination, cleanup, and direct-access denial. Emulators do not enforce production composite-index requirements or verify cloud IAM: those need deployment smoke tests.
+The integration suite uses real Auth, Firestore, and Storage emulators plus an HTTP server running the same Express API. Tests generate their own WAV and MP3 fixtures. It covers authorization, file validation, signed-link emulation, replacement/deletion, legacy cleanup, retries, concurrency, pagination, cleanup, and direct-access denial. Emulators do not enforce production composite-index requirements or verify cloud IAM: those need deployment smoke tests.
 
 ## API
 
@@ -49,14 +49,12 @@ All routes except `GET /v1/health` require `Authorization: Bearer FIREBASE_ID_TO
 | `GET /v1/tracks/latest?cursor=…` | Latest tracks, 24 per page |
 | `GET /v1/tracks?title=…&cursor=…` | Full normalized-title match, duplicates distinguished by ID |
 | `GET /v1/tracks/:id` | Current track |
-| `GET /v1/tracks/:id/versions?cursor=…` | History, 24 per page |
-| `GET /v1/tracks/:id/versions/:versionId` | Historical snapshot and fresh audio URL |
 | `POST /v1/tracks` | Create track |
-| `PUT /v1/tracks/:id` | Save a new version |
+| `PUT /v1/tracks/:id` | Replace audio or update title/details |
 
 Save requests use multipart fields `title` (1–160 characters), `description` (0–5,000), and `file` (required for create; optional for update). Maximum file size is 10,000,000 bytes. Both save routes require a UUID `Idempotency-Key`; updates also require `If-Match` containing the current version UUID. Keep the same key when retrying an unchanged request. A `409 VERSION_CONFLICT` requires reloading the track; a `409 SAVE_IN_PROGRESS` means retry later. Failed/interrupted uploads are cleaned by a scheduled job before the same key can be retried.
 
-Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `description`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim editor; requesting a version refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
+Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `description`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim editor; requesting the track refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
 
 ## Trim audio
 
@@ -64,17 +62,21 @@ Choose the scissors button on a sound card, or **Trim audio & inspect waveform**
 
 Two fingers on opposite handles can adjust both ends together. Pinch elsewhere on the waveform or use a trackpad pinch to zoom; drag the waveform to pan when zoomed. **Fit whole sound** appears only while zoomed. The filled waveform uses actual sample extrema, keeping brief transients visible without stereo phase cancellation.
 
-**Apply trim** prepares replacement audio; **Save version** commits it through the existing versioned API. Closing without saving does not publish a version.
+**Save crop** directly replaces the existing sound and closes the editor. There is no second save dialog. The pencil beside a card title renames it inline. For new uploads, **Apply trim** prepares the selected file before adding the sound.
 
-Mono and stereo WAV/MP3 inputs are decoded locally using Web Audio. Trims export 16-bit PCM WAV, including MP3 input, without normalization, fades or pitch changes. Cut boundaries round to the nearest decoded sample. Existing tracks use their recorded sample rate; newly selected files use the browser audio context's sample rate, shown in the editor. Output must fit the existing 10 MB limit. Saved originals remain in version history; unsaved new uploads are not archived. The audio tests check RMS/peak math, stereo preservation, sample boundaries, WAV metadata and output limits.
+Mono and stereo WAV/MP3 inputs are decoded locally using Web Audio. Trims export 16-bit PCM WAV, including MP3 input, without normalization, fades or pitch changes. Cut boundaries round to the nearest decoded sample. Existing tracks use their recorded sample rate; newly selected files use the browser audio context's sample rate. Output must fit the existing 10 MB limit. Only the current sound is retained. A successful replacement queues the old object for deletion; no saved history is created. The audio tests check RMS/peak math, stereo preservation, sample boundaries, WAV metadata and output limits.
 
 Web Audio references: [decoding and resampling](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/decodeAudioData), [bounded playback](https://developer.mozilla.org/en-US/docs/Web/API/AudioBufferSourceNode/start).
 
 ## Storage behavior
 
-Profiles live at `users/{UUID}`; tracks at `users/{UUID}/tracks/{trackUUID}`; immutable versions below each track. Exact paths are stored with each version. The bucket is private and the client cannot read/write Firestore directly.
+Profiles live at `users/{UUID}`; tracks at `users/{UUID}/tracks/{trackUUID}`; each track holds only its current audio object reference. The bucket is private and the client cannot read/write Firestore directly.
 
-Audio paths are `username/original-title--trackUUID/saveTimestamp--versionUUID.wav` (or `.mp3`). Username and original folder slug remain fixed when a track is renamed. Changed explicit saves create versions; metadata-only saves share the same audio object; identical saves do nothing. No daily snapshots, bucket listings, offset paging, or full-library scans. Old versions are retained indefinitely. Pagination is a live view: after concurrent edits, refresh the list to see items moved to its beginning.
+Audio paths remain unique (`username/original-title--trackUUID/saveTimestamp--revisionUUID.wav` or `.mp3`) to publish replacements safely. Renames reuse the current object. Replacements upload first, transactionally swap the current reference, and durably queue the old exact path in `users/{uid}/saves` with status `retired`. Deletion runs immediately and retries through the existing cleanup schedule if storage is unavailable. No bucket listing is used. Concurrent edits still use the internal `versionId` as an optimistic concurrency token; it does not represent retained history. Historical API routes are removed. Idempotent retries after a later save return the current track, never a deleted audio link.
+
+Existing local history can be removed with `npm run build:api` followed by `node functions/scripts/remove-local-history.mjs`. The script is locked to the loopback demo project/account, processes bounded metadata pages, deletes exact retired object references, and preserves the current object. Replaced audio is not recoverable through this application.
+
+In a future cloud rollout, disable bucket object versioning and soft-delete retention if immediate physical reclamation is required; otherwise provider retention can continue to occupy space after application deletion. No cloud configuration is changed by local cleanup.
 
 ## Deployment
 

@@ -3,7 +3,7 @@ import Busboy from 'busboy';
 import { getAuth } from 'firebase-admin/auth';
 import { logger } from 'firebase-functions';
 import { HttpError, inspectAudio, MAX_BYTES, normalizeTitle, requireUuid, validateDetails } from './domain.js';
-import { db, getTrack, page, present, save, tracks } from './store.js';
+import { db, getTrack, page, present, save } from './store.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -44,16 +44,6 @@ app.get('/v1/tracks', async (req, res) => {
   res.json(await page(res.locals.user.id, req.query.cursor, normalizeTitle(req.query.title)));
 });
 app.get('/v1/tracks/:id', async (req, res) => res.json(await present(await getTrack(res.locals.user.id, requireUuid(req.params.id)))));
-app.get('/v1/tracks/:id/versions', async (req, res) => {
-  const id = requireUuid(req.params.id);
-  await getTrack(res.locals.user.id, id);
-  res.json(await page(res.locals.user.id, req.query.cursor, undefined, id));
-});
-app.get('/v1/tracks/:id/versions/:versionId', async (req, res) => {
-  const version = await tracks(res.locals.user.id).doc(requireUuid(req.params.id)).collection('versions').doc(requireUuid(req.params.versionId)).get();
-  if (!version.exists) throw new HttpError(404, 'NOT_FOUND', 'Version not found.');
-  res.json(await present(version.data() as Awaited<ReturnType<typeof getTrack>>));
-});
 
 async function multipart(req: Request): Promise<{ fields: Record<string, string>; file?: { buffer: Buffer; filename: string } }> {
   if (!req.is('multipart/form-data')) throw new HttpError(415, 'MULTIPART_REQUIRED', 'Submit audio and details as multipart form data.');
@@ -90,7 +80,7 @@ async function saveRoute(req: Request, res: Response) {
   const details = validateDetails(fields);
   const inspected = file ? { buffer: file.buffer, audio: await inspectAudio(file.buffer, file.filename) } : undefined;
   const result = await save({ uid: res.locals.user.id, username: res.locals.user.username, key, id, expectedVersion, details, file: inspected });
-  res.status(id ? 200 : 201).json({ ...(await present(result.track)), unchanged: result.unchanged });
+  res.status(id ? 200 : 201).json({ ...(await present(await getTrack(res.locals.user.id, result.track.id))), unchanged: result.unchanged });
 }
 app.post('/v1/tracks', saveRoute);
 app.put('/v1/tracks/:id', saveRoute);

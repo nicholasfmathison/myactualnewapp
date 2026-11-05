@@ -1,4 +1,4 @@
-import { before, after, test } from 'node:test';
+import { before, after, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
@@ -7,7 +7,7 @@ import { getStorage } from 'firebase-admin/storage';
 import type { Server } from 'node:http';
 import { wav, mp3 } from './fixtures.js';
 import { inspectAudio, normalizeTitle, type Track } from '../src/domain.js';
-import { db, cleanupIncompleteSaves } from '../src/store.js';
+import { db, cleanupIncompleteSaves, cleanupRetiredAudio, purgeTrackHistory } from '../src/store.js';
 import { app } from '../src/app.js';
 
 if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST || !process.env.FIREBASE_STORAGE_EMULATOR_HOST) throw new Error('Integration tests require emulators. Run npm run test:integration from the repository root.');
@@ -81,27 +81,66 @@ test('retries return the original save and reuse of a key with different data fa
   const retry = await put('First sound', { key: createKey }); assert.equal(retry.body.id, original.id); assert.equal(retry.body.versionId, original.versionId);
   assert.equal((await put('Different sound', { key: createKey })).status, 409);
 });
-test('metadata-only edits retain audio and preserve historical titles', async () => {
+test('renaming retains the audio and creates no history records', async () => {
+  const before = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
   const result = await put('Renamed sound', { id: original.id, version: original.versionId, audio: null }); assert.equal(result.status, 200); renamed = result.body;
   const current = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
-  const old = (await db().doc(`users/${uid}/tracks/${original.id}/versions/${original.versionId}`).get()).data()!;
-  assert.equal(current.objectPath, old.objectPath); assert.equal(old.title, 'First sound'); assert.notEqual(current.versionId, old.versionId);
-  const resultPage = await request(`/tracks/${original.id}/versions`); assert.equal(resultPage.body.items.length, 2); assert.equal(resultPage.body.items[0].title, 'Renamed sound');
+  assert.equal(current.objectPath, before.objectPath); assert.notEqual(current.versionId, before.versionId);
+  assert.equal((await db().collection(`users/${uid}/tracks/${original.id}/versions`).limit(1).get()).empty, true);
+  assert.equal((await request(`/tracks/${original.id}/versions`)).status, 404);
 });
 test('unchanged saves do not create versions and stale edits return 409', async () => {
   const noChange = await put('Renamed sound', { id: original.id, version: renamed.versionId, audio: null }); assert.equal(noChange.body.unchanged, true); assert.equal(noChange.body.versionId, renamed.versionId);
   assert.equal((await put('Stale edit', { id: original.id, version: original.versionId, audio: null })).status, 409);
 });
-test('audio replacement creates an object without changing the old object or folder', async () => {
+test('replacement publishes new audio and deletes the replaced object', async () => {
+  const before = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
   const result = await put('Another title', { id: original.id, version: renamed.versionId, audio: wav(220) }); assert.equal(result.status, 200);
-  const history = await request(`/tracks/${original.id}/versions/${original.versionId}`); assert.equal(history.body.title, 'First sound');
-  const oldAudio = await fetch(history.body.audioUrl); assert.deepEqual(Buffer.from(await oldAudio.arrayBuffer()), wav());
+  assert.equal((await getStorage().bucket().file(before.objectPath).exists())[0], false);
   const current = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
   assert.ok(current.objectPath.includes(`/first-sound--${original.id}/`)); renamed = result.body;
+  assert.deepEqual(Buffer.from(await (await fetch(result.body.audioUrl)).arrayBuffer()), wav(220));
+  const retry = await put('First sound', { key: createKey });
+  assert.equal(retry.body.versionId, renamed.versionId); assert.equal(retry.body.title, 'Another title');
+  assert.equal((await fetch(retry.body.audioUrl)).status, 200);
+});
+
+test('failed deletion keeps a durable cleanup job without failing the successful save', async () => {
+  const before = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
+  const failure = mock.method(Object.getPrototypeOf(getStorage().bucket().file(before.objectPath)), 'delete', async () => { throw new Error('temporary storage failure'); });
+  try {
+    const result = await put('Cleanup retry', { id: original.id, version: renamed.versionId, audio: wav(330) });
+    assert.equal(result.status, 200); renamed = result.body;
+    assert.equal((await getStorage().bucket().file(before.objectPath).exists())[0], true);
+    assert.equal((await db().collection(`users/${uid}/saves`).where('status', '==', 'retired').limit(10).get()).size, 1);
+  } finally { failure.mock.restore(); }
+  await cleanupRetiredAudio();
+  assert.equal((await getStorage().bucket().file(before.objectPath).exists())[0], false);
+  assert.equal((await db().collection(`users/${uid}/saves`).where('status', '==', 'retired').limit(10).get()).empty, true);
+});
+
+test('legacy cleanup paginates metadata and removes old audio but preserves the current object', async () => {
+  const ref = db().doc(`users/${uid}/tracks/${original.id}`); const current = (await ref.get()).data()!;
+  const legacyPath = current.folder + '/legacy.wav'; await getStorage().bucket().file(legacyPath).save(wav(110));
+  const batch = db().batch();
+  for (let i = 0; i < 52; i++) batch.set(ref.collection('versions').doc(String(i).padStart(3, '0')), { ...current, objectPath: i === 51 ? current.objectPath : legacyPath });
+  await batch.commit();
+  assert.equal(await purgeTrackHistory(uid, original.id), 50);
+  assert.equal(await purgeTrackHistory(uid, original.id), 2);
+  assert.equal(await purgeTrackHistory(uid, original.id), 0);
+  assert.equal((await getStorage().bucket().file(legacyPath).exists())[0], false);
+  assert.equal((await getStorage().bucket().file(current.objectPath).exists())[0], true);
+  const guard = db().doc(`users/${uid}/saves/guard-current`);
+  await guard.set({ status: 'retired', userId: uid, trackId: original.id, objectPath: current.objectPath });
+  await cleanupRetiredAudio(); assert.equal((await getStorage().bucket().file(current.objectPath).exists())[0], true);
+  await guard.delete();
 });
 test('concurrent edits publish exactly one winner', async () => {
-  const results = await Promise.all([put('Race A', { id: original.id, version: renamed.versionId, audio: null }), put('Race B', { id: original.id, version: renamed.versionId, audio: null })]);
+  const results = await Promise.all([put('Race A', { id: original.id, version: renamed.versionId, audio: wav(550) }), put('Race B', { id: original.id, version: renamed.versionId, audio: wav(660) })]);
   assert.deepEqual(results.map(r => r.status).sort(), [200, 409]);
+  await cleanupIncompleteSaves();
+  const live = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
+  assert.equal((await getStorage().bucket().file(live.objectPath).exists())[0], true);
 });
 test('cross-user ID/version access and cross-user cursor reuse are denied', async () => {
   assert.equal((await request(`/tracks/${original.id}`, {}, otherToken)).status, 404);

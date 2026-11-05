@@ -6,9 +6,10 @@ import { Modal, Notice } from './LibraryUI';
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-export function TrimEditor({ track, file, close, apply }: { track?: Track; file?: File; close: () => void; apply: (file: File) => void }) {
+export function TrimEditor({ track, file, close, apply }: { track?: Track; file?: File; close: () => void; apply: (file: File) => void | Promise<void> }) {
   const [audio, setAudio] = useState<AudioBuffer>();
   const [start, setStart] = useState(0); const [end, setEnd] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [playing, setPlaying] = useState(false);
   const bounds = useRef({ start, end }); bounds.current = { start, end };
   const [playhead, setPlayhead] = useState<number>(); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ export function TrimEditor({ track, file, close, apply }: { track?: Track; file?
         if (file) blob = file;
         else {
           if (!track) throw new Error('Choose an audio file first.');
-          const version = await api<Track>(`/tracks/${track.id}/versions/${track.versionId}`, { signal: controller.signal });
+          const version = await api<Track>(`/tracks/${track.id}`, { signal: controller.signal });
           const response = await fetch(version.audioUrl, { signal: controller.signal });
           if (!response.ok) throw new Error('Could not load the audio. Close the editor and try again.');
           blob = await response.blob();
@@ -67,24 +68,25 @@ export function TrimEditor({ track, file, close, apply }: { track?: Track; file?
       const tick = () => { if (source.current !== node) return; setPlayhead(Math.min(last, first + ctx.currentTime - began)); requestAnimationFrame(tick); }; tick();
     } catch { if (generation === playbackGeneration.current) { setPlaying(false); setError('Playback could not start. Try again.'); } }
   }
-  function finish() {
-    if (!audio || !valid || unchanged) return;
-    try { stop(); const data = trimToWav(audio, start, end); apply(new File([data], `${filename.current.replace(/\.[^.]+$/, '').replace(/-trimmed$/, '')}-trimmed.wav`, { type: 'audio/wav' })); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Could not trim this audio.'); }
+  async function finish() {
+    if (!audio || !valid || unchanged || saving) return;
+    setSaving(true); setError('');
+    try { stop(); const data = trimToWav(audio, start, end); await apply(new File([data], `${filename.current.replace(/\.[^.]+$/, '').replace(/-trimmed$/, '')}-trimmed.wav`, { type: 'audio/wav' })); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Could not save this crop.'); } finally { setSaving(false); }
   }
 
-  return <Modal title="Trim" subtitle="" wide close={close} neutral hideTitle>
+  return <Modal title="Trim" subtitle="" wide close={() => { if (!saving) close(); }} neutral hideTitle>
     {loading && <p role="status" className="py-16 text-center text-sm text-neutral-400">Loading waveform…</p>}
     {error && <Notice>{error}</Notice>}
-    {audio && <div className="space-y-5">
+    {audio && <fieldset disabled={saving} className={saving ? 'pointer-events-none space-y-5' : 'space-y-5'}>
       <p className="truncate pr-12 text-xs text-neutral-400">{filename.current}</p>
       <TrimWaveform audio={audio} start={start} end={end} playhead={playhead} change={changeEdge} />
       <p className="text-center text-xs text-neutral-400">Drag the handles. Pinch to zoom. Drag the waveform to move.</p>
       {size > 10_000_000 && <Notice>The selected WAV exceeds 10 MB. Keep a shorter range before applying.</Notice>}
       <div className="flex items-center justify-end gap-3 pt-1">
         <button type="button" className="mr-auto rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-neutral-100 focus-visible:outline-neutral-500" disabled={!valid} onClick={() => void preview()}>{playing ? 'Stop' : 'Preview'}</button>
-        <button type="button" className="rounded-lg bg-neutral-800 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 focus-visible:outline-neutral-500 disabled:!cursor-default" disabled={!valid || unchanged || size > 10_000_000} onClick={finish}>Apply trim</button>
+        <button type="button" className="rounded-lg bg-neutral-800 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 focus-visible:outline-neutral-500 disabled:!cursor-default" disabled={!valid || unchanged || size > 10_000_000} onClick={() => void finish()}>{saving ? 'Saving…' : track ? 'Save crop' : 'Apply trim'}</button>
       </div>
-    </div>}
+    </fieldset>}
   </Modal>;
 }

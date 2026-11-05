@@ -1,10 +1,63 @@
 {
   "indexes": [
-    { "collectionGroup": "tracks", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "normalizedTitle", "order": "ASCENDING" }, { "fieldPath": "savedAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "saves", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "expiresAt", "order": "ASCENDING" }] }
+    {
+      "collectionGroup": "tracks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "normalizedTitle",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "savedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "saves",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "saves",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "trackId",
+          "order": "ASCENDING"
+        }
+      ]
+    }
   ],
   "fieldOverrides": [
-    { "collectionGroup": "saves", "fieldPath": "status", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
-    { "collectionGroup": "saves", "fieldPath": "result", "indexes": [] }
+    {
+      "collectionGroup": "saves",
+      "fieldPath": "status",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "saves",
+      "fieldPath": "result",
+      "indexes": []
+    }
   ]
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { getFirestore, FieldPath, type Query } from 'firebase-admin/firestore';
+import { getFirestore, FieldPath, type Query, type Transaction, type DocumentReference } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
+import { logger } from 'firebase-functions';
 import { decodeCursor, encodeCursor, fingerprint, HttpError, PAGE_SIZE, slug, type AudioInfo, type Track } from './domain.js';
 
 export const db = () => getFirestore();
@@ -21,9 +22,9 @@ export async function present(track: Track) {
   const { objectPath: _path, folder: _folder, normalizedTitle: _normalized, ...data } = track;
   return { ...data, audioUrl: url, audioUrlExpiresAt: expiresAt };
 }
-export async function page(uid: string, cursor: unknown, title?: string, trackId?: string) {
-  const scope = JSON.stringify([uid, trackId ?? '', title ?? '']);
-  let query: Query = trackId ? tracks(uid).doc(trackId).collection('versions') : tracks(uid);
+export async function page(uid: string, cursor: unknown, title?: string) {
+  const scope = JSON.stringify([uid, '', title ?? '']);
+  let query: Query = tracks(uid);
   if (title !== undefined) query = query.where('normalizedTitle', '==', title);
   query = query.orderBy('savedAt', 'desc').orderBy(FieldPath.documentId(), 'desc');
   const after = decodeCursor(cursor, scope);
@@ -53,7 +54,7 @@ export async function save(input: SaveInput): Promise<{ track: Track; unchanged:
     if (existing.exists) {
       const op = existing.data()!;
       if (op.requestHash !== requestHash) throw new HttpError(409, 'IDEMPOTENCY_CONFLICT', 'This save key was already used for a different request.');
-      if (op.status === 'complete') return { result: op.result as { track: Track; unchanged: boolean } };
+      if (op.status === 'complete') return { replayId: (op.trackId ?? op.result.track.id) as string, unchanged: (op.unchanged ?? op.result?.unchanged ?? false) as boolean };
       if (op.status !== 'failed') throw new HttpError(409, 'SAVE_IN_PROGRESS', 'This save is still processing. Retry the same request shortly.');
     }
     const current = await tx.get(ref);
@@ -64,7 +65,7 @@ export async function save(input: SaveInput): Promise<{ track: Track; unchanged:
     const sameAudio = !file || (file.audio.sha256 === previous?.audio.sha256 && file.audio.filename === previous.audio.filename);
     if (previous && sameAudio && details.title === previous.title && details.description === previous.description) {
       const result = { track: previous, unchanged: true };
-      tx.set(operation, { status: 'complete', requestHash, result });
+      tx.set(operation, { status: 'complete', requestHash, trackId: previous.id, unchanged: true });
       return { result };
     }
     const savedAt = new Date(Math.max(Date.now(), previous ? Date.parse(previous.savedAt) + 1 : 0)).toISOString();
@@ -79,25 +80,30 @@ export async function save(input: SaveInput): Promise<{ track: Track; unchanged:
     return { track, upload };
   });
   if ('result' in reservation) return reservation.result!;
+  if ('replayId' in reservation) return { track: await getTrack(uid, reservation.replayId!), unchanged: reservation.unchanged! };
   const { track, upload } = reservation;
   try {
     if (upload) await bucket().file(track.objectPath).save(file!.buffer, { resumable: false,
       preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType: track.audio.contentType, cacheControl: 'private, max-age=0',
         ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST ? { metadata: { firebaseStorageDownloadTokens: randomUUID() } } : {}) } });
-    return await db().runTransaction(async tx => {
+    const result = await db().runTransaction(async tx => {
       const [op, current] = await Promise.all([tx.get(operation), tx.get(ref)]);
       if (op.get('lease') !== lease || op.get('status') !== 'pending') throw new HttpError(409, 'SAVE_EXPIRED', 'This save expired. Try again.');
       if (current.exists && current.get('versionId') !== expectedVersion) throw new HttpError(409, 'VERSION_CONFLICT', 'This track changed. Reload it before saving.');
       const result = { track, unchanged: false };
-      tx.create(ref.collection('versions').doc(track.versionId), track);
+      if (current.exists && current.get('objectPath') !== track.objectPath) queueRetiredAudio(tx, uid, id, current.get('objectPath'));
       tx.set(ref, track);
-      tx.set(operation, { status: 'complete', requestHash, result });
+      tx.set(operation, { status: 'complete', requestHash, trackId: track.id, unchanged: false });
       return result;
     });
+    // Publishing succeeds even if deletion is temporarily unavailable. The queued
+    // exact reference remains durable for the scheduled cleanup to retry.
+    await cleanupRetiredAudioForTrack(uid, id);
+    return result;
   } catch (error) {
     // A transaction response can be lost after commit. Never delete committed audio.
     const current = await operation.get();
-    if (current.get('status') === 'complete') return current.get('result');
+    if (current.get('status') === 'complete') return { track: await getTrack(uid, current.get('trackId') ?? current.get('result').track.id), unchanged: current.get('unchanged') ?? current.get('result')?.unchanged ?? false };
     // Leave the exact object reference for bounded cleanup; no bucket enumeration.
     await db().runTransaction(async tx => {
       const op = await tx.get(operation);
@@ -107,7 +113,58 @@ export async function save(input: SaveInput): Promise<{ track: Track; unchanged:
   }
 }
 
+function queueRetiredAudio(tx: Transaction, uid: string, trackId: string, objectPath: string) {
+  const ref = db().doc(`users/${uid}/saves/gc-${fingerprint(objectPath)}`);
+  tx.set(ref, { status: 'retired', trackId, userId: uid, objectPath });
+}
+
+async function deleteRetiredAudio(ref: DocumentReference) {
+  try {
+    const job = (await ref.get()).data();
+    if (job?.status !== 'retired') return;
+    const current = await tracks(job.userId).doc(job.trackId).get();
+    if (current.get('objectPath') === job.objectPath) return; // Never delete live audio.
+    await bucket().file(job.objectPath).delete({ ignoreNotFound: true });
+    await ref.delete();
+  } catch (error) {
+    logger.warn('audio_cleanup_deferred', { errorType: error instanceof Error ? error.name : 'unknown' });
+  }
+}
+
+async function cleanupRetiredAudioForTrack(uid: string, id: string) {
+  try {
+    const jobs = await db().collection('users').doc(uid).collection('saves')
+      .where('status', '==', 'retired').where('trackId', '==', id).limit(50).get();
+    for (const job of jobs.docs) await deleteRetiredAudio(job.ref);
+  } catch { logger.warn('audio_cleanup_deferred', { stage: 'query' }); }
+}
+
+export async function cleanupRetiredAudio() {
+  const jobs = await db().collectionGroup('saves').where('status', '==', 'retired').limit(50).get();
+  for (const job of jobs.docs) await deleteRetiredAudio(job.ref);
+}
+
+// One bounded page of legacy history, using indexed documents and exact paths.
+// The migration calls this repeatedly; no bucket listing or audio scanning.
+export async function purgeTrackHistory(uid: string, id: string) {
+  const ref = tracks(uid).doc(id);
+  const history = await ref.collection('versions').orderBy(FieldPath.documentId()).limit(50).get();
+  if (history.empty) return 0;
+  await db().runTransaction(async tx => {
+    const current = await tx.get(ref);
+    if (!current.exists) throw new HttpError(404, 'NOT_FOUND', 'Track not found.');
+    for (const version of history.docs) {
+      const path = version.get('objectPath');
+      if (path && path !== current.get('objectPath')) queueRetiredAudio(tx, uid, id, path);
+      tx.delete(version.ref);
+    }
+  });
+  await cleanupRetiredAudioForTrack(uid, id);
+  return history.size;
+}
+
 export async function cleanupIncompleteSaves() {
+  await cleanupRetiredAudio();
   const expired = await db().collectionGroup('saves').where('status', '==', 'pending')
     .where('expiresAt', '<=', new Date().toISOString()).orderBy('expiresAt').limit(50).get();
   const cleaning = await db().collectionGroup('saves').where('status', '==', 'cleaning').limit(50).get();

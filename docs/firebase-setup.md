@@ -60,16 +60,16 @@ After both environments are configured, set repository variable `FIREBASE_READY`
 
 ## 4. Release and verify
 
-Push `dev` and verify its workflow: emulator tests, deployment, health commit SHA, unauthorized access denial, and preview at `https://DEV_PROJECT.web.app/`. Check login, WAV/MP3 uploads, playback, history, and pagination. Firebase may need time to finish building indexes on the first deployment; wait for them to become ready before the smoke test of library queries.
+Push `dev` and verify its workflow: emulator tests, deployment, health commit SHA, unauthorized access denial, and preview at `https://DEV_PROJECT.web.app/`. Check login, WAV/MP3 uploads, playback, cropping/replacement, inline rename, and pagination. Firebase may need time to finish building indexes on the first deployment; wait for them to become ready before the smoke test of library queries.
 
 Then merge `dev` into `main`. The workflow deploys the production backend first and only publishes GitHub Pages after API verification succeeds. The production frontend stays at `https://nicholasfmathison.github.io/myactualnewapp/`. Check it with the production account. Verify a dev token is rejected by production and that each library has separate data. Return local checkout to `dev`.
 
-The scheduled cleanup job removes only incomplete uploads using indexed save-operation records and exact object references; it never lists bucket objects and never deletes saved historical versions. Verify Cloud Scheduler can invoke the deployed cleanup function and that runtime identity has `iam.serviceAccounts.signBlob` on itself for signed URLs. API logs exclude request bodies, credentials, filenames, and signed links.
+The scheduled cleanup job removes incomplete uploads and retired replacement audio using indexed save-operation records and exact object references; it never lists bucket objects and guards the current audio reference before deleting retired files. Verify Cloud Scheduler can invoke the deployed cleanup function and that runtime identity has `iam.serviceAccounts.signBlob` on itself for signed URLs. API logs exclude request bodies, credentials, filenames, and signed links.
 
-Use Google Cloud budget alerts for each project. A maximum of two API instances limits compute concurrency but is not a spending cap. Keep the dev and production accounts and storage separate. Do not enable storage object-versioning: application history already keeps explicit immutable audio objects.
+Use Google Cloud budget alerts for each project. A maximum of two API instances limits compute concurrency but is not a spending cap. Keep the dev and production accounts and storage separate. Do not enable storage object-versioning. Review and disable soft-delete retention if immediate storage reclamation is required; provider retention is separate from application history.
 
 ## Rollback and maintenance
 
-Revert the offending commit and push the same branch to redeploy a previous compatible API/UI. Saves are additive and immutable; rollback does not delete stored versions. Treat future changes to the Firestore record format as migrations. Record-format changes must remain compatible while the new backend deploys before the frontend. Review Firebase runtime support before Node 22 reaches end of support.
+Revert the offending commit and push the same branch to redeploy a previous compatible API/UI. Audio replacements remove old files. A code rollback cannot restore deleted audio. Do not roll back to a build that relies on historical audio records. Treat future changes to the Firestore record format as migrations. Record-format changes must remain compatible while the new backend deploys before the frontend. Review Firebase runtime support before Node 22 reaches end of support.
 
 `npm audit --omit=dev` is clean for frontend and backend dependencies at implementation time. The Firebase CLI's development-only dependency tree currently has moderate upstream advisories; do not use `npm audit fix --force`, which proposes an obsolete CLI downgrade.

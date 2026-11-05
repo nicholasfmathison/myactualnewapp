@@ -1,31 +1,55 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, date, duration, fileSize, errorMessage, type Page, type Track } from '../lib/api';
+import { useRef, useState, type FormEvent } from 'react';
+import { api, errorMessage, type Track } from '../lib/api';
 import { TrimEditor } from './TrimEditor';
 import { Modal, Notice, Symbol } from './LibraryUI';
-export function SaveDialog({ track, close, saved, initialTrim = false }: { initialTrim?: boolean; track?: Track; close: () => void; saved: () => void }) {
-  const [title, setTitle] = useState(track?.title ?? ''); const [description, setDescription] = useState(track?.description ?? '');
+
+export function SaveDialog({ track, close, saved }: { track?: Track; close: () => void; saved: () => void }) {
+  const [title, setTitle] = useState(''); const [description, setDescription] = useState('');
   const [file, setFile] = useState<File>(); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const [trimming, setTrimming] = useState(initialTrim);
-  const key = useRef(crypto.randomUUID()); const changed = () => { key.current = crypto.randomUUID(); setError(''); };
+  const [trimming, setTrimming] = useState(false);
+  const key = useRef(crypto.randomUUID()); const cropHash = useRef('');
+  const changed = () => { key.current = crypto.randomUUID(); setError(''); };
+  async function replaceAudio(trimmed: File) {
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await trimmed.arrayBuffer())), byte => byte.toString(16).padStart(2, '0')).join('');
+    if (cropHash.current !== hash) { key.current = crypto.randomUUID(); cropHash.current = hash; }
+    const body = new FormData(); body.set('title', track!.title); body.set('description', track!.description); body.set('file', trimmed);
+    await api(`/tracks/${track!.id}`, { method: 'PUT', body, headers: { 'Idempotency-Key': key.current, 'If-Match': track!.versionId } }); saved();
+  }
   async function submit(event: FormEvent) {
     event.preventDefault(); setError('');
-    if (!file && !track) { setError('Choose a WAV or MP3 file.'); return; }
-    if (file && (file.size > 10_000_000 || file.size === 0)) { setError('Choose a nonempty audio file of 10 MB or less.'); return; }
-    setBusy(true); const body = new FormData(); body.set('title', title); body.set('description', description); if (file) body.set('file', file);
-    try { await api(`/tracks${track ? `/${track.id}` : ''}`, { method: track ? 'PUT' : 'POST', body, headers: { 'Idempotency-Key': key.current, ...(track ? { 'If-Match': track.versionId } : {}) } }); saved(); }
+    if (!file || !file.size || file.size > 10_000_000) { setError('Choose a nonempty WAV or MP3 of 10 MB or less.'); return; }
+    setBusy(true); const body = new FormData(); body.set('title', title); body.set('description', description); body.set('file', file);
+    try { await api('/tracks', { method: 'POST', body, headers: { 'Idempotency-Key': key.current } }); saved(); }
     catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
   }
-  if (trimming) return <TrimEditor track={track} file={file} close={() => setTrimming(false)} apply={trimmed => { setFile(trimmed); changed(); setTrimming(false); }} />;
-  return <Modal title={track ? 'Save a new version' : 'Add a sound'} subtitle={track ? 'KEEP THE IDEA EVOLVING' : 'A NEW ADDITION'} close={() => { if (!busy) close(); }}><form className="space-y-5" onSubmit={submit}><fieldset disabled={busy} className="space-y-5"><label className="upload-zone"><Symbol name="upload" className="!h-7 !w-7 text-[#71875d]" /><span className="mt-2 font-medium">{file?.name ?? (track ? 'Choose replacement audio' : 'Choose your audio file')}</span><span className="text-xs text-stone-400">WAV or MP3 · Up to 10 MB{track && ' · Optional'}</span><input className="mt-3 block w-full text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-stone-100 file:px-3 file:py-2" aria-label="Audio file" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" onChange={e => { setFile(e.target.files?.[0]); changed(); }} /></label>{(file || track) && <button type="button" className="secondary w-full justify-center" onClick={() => setTrimming(true)}><Symbol name="trim" />Trim audio & inspect waveform</button>}<label className="field-label">Title<input className="field" value={title} maxLength={160} required onChange={e => { setTitle(e.target.value); changed(); }} placeholder="Give this sound a name" /></label><label className="field-label">Description <span className="font-normal text-stone-400">(optional)</span><textarea className="field min-h-28 resize-y" value={description} maxLength={5000} onChange={e => { setDescription(e.target.value); changed(); }} placeholder="A little context, a recording note, an idea…" /></label></fieldset>{error && <Notice>{error}</Notice>}<p className="text-xs leading-relaxed text-stone-400">{track ? 'Previous versions stay in your history. Leave the audio unchanged to save just your notes.' : 'Your sound is private. Its file details are read automatically when you save.'}</p><div className="flex justify-end gap-3"><button type="button" className="secondary" disabled={busy} onClick={close}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : track ? 'Save version' : 'Save sound'}<Symbol name="arrow" /></button></div></form></Modal>;
+  if (track) return <TrimEditor track={track} close={close} apply={replaceAudio} />;
+  if (trimming && file) return <TrimEditor file={file} close={() => setTrimming(false)} apply={trimmed => { setFile(trimmed); changed(); setTrimming(false); }} />;
+  return <Modal title="Add a sound" subtitle="" close={() => { if (!busy) close(); }}><form className="space-y-5" onSubmit={submit}>
+    <fieldset disabled={busy} className="space-y-5">
+      <label className="upload-zone"><Symbol name="upload" /><span>{file?.name ?? 'Choose your audio file'}</span><span className="text-xs text-stone-400">WAV or MP3 · Up to 10 MB</span><input aria-label="Audio file" className="mt-3 block w-full text-xs" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" onChange={e => { setFile(e.target.files?.[0]); changed(); }} /></label>
+      {file && <button type="button" className="secondary" onClick={() => setTrimming(true)}><Symbol name="trim" />Crop audio</button>}
+      <label className="field-label">Title<input className="field" value={title} maxLength={160} required onChange={e => { setTitle(e.target.value); changed(); }} /></label>
+      <label className="field-label">Description (optional)<textarea className="field min-h-20" value={description} maxLength={5000} onChange={e => { setDescription(e.target.value); changed(); }} /></label>
+    </fieldset>
+    {error && <Notice>{error}</Notice>}
+    <div className="flex justify-end gap-3"><button type="button" className="secondary" disabled={busy} onClick={close}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Add sound'}</button></div>
+  </form></Modal>;
+}
+
+export function TrackTitle({ track, saved }: { track: Track; saved: (updated: Track) => void }) {
+  const [editing, setEditing] = useState(false); const [value, setValue] = useState(track.title);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const key = useRef(crypto.randomUUID());
+  async function rename(event: FormEvent) {
+    event.preventDefault(); if (!value.trim()) return;
+    if (value.trim() === track.title) { setEditing(false); return; }
+    setBusy(true); setError(''); const body = new FormData(); body.set('title', value.trim()); body.set('description', track.description);
+    try { const updated = await api<Track>(`/tracks/${track.id}`, { method: 'PUT', body, headers: { 'Idempotency-Key': key.current, 'If-Match': track.versionId } }); saved(updated); setEditing(false); }
+    catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
+  }
+  return <div>{editing ? <form onSubmit={rename} className="flex flex-wrap items-center gap-1"><input autoFocus aria-label="Sound title" className="field !mt-0 min-w-0 flex-1 !py-2" maxLength={160} required disabled={busy} value={value} onChange={e => { setValue(e.target.value); key.current = crypto.randomUUID(); }} onKeyDown={e => { if (e.key === 'Escape' && !busy) { e.preventDefault(); setEditing(false); setError(''); } }} /><button type="submit" disabled={busy} className="rounded-lg px-2 py-2 text-xs font-medium text-neutral-600">{busy ? 'Saving…' : 'Save'}</button><button type="button" disabled={busy} className="icon-button" aria-label="Cancel rename" onClick={() => { setEditing(false); setError(''); }}><Symbol name="close" /></button></form> : <div className="flex items-center gap-1"><h2 className="min-w-0 truncate text-lg font-semibold tracking-tight" title={track.title}>{track.title}</h2><button type="button" className="icon-button !h-7 !w-7" aria-label={`Rename ${track.title}`} onClick={() => { setValue(track.title); key.current = crypto.randomUUID(); setEditing(true); }}><Symbol name="edit" className="!h-3.5 !w-3.5" /></button></div>}{error && <p role="alert" className="mt-2 text-xs text-amber-800">{error}</p>}</div>;
 }
 export function Player({ track }: { track: Track }) {
   const [source, setSource] = useState<Track>(); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
-  async function prepare() { setBusy(true); setError(''); try { setSource(await api<Track>(`/tracks/${track.id}/versions/${track.versionId}`)); } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); } }
+  async function prepare() { setBusy(true); setError(''); try { setSource(await api<Track>(`/tracks/${track.id}`)); } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); } }
   return <div className="space-y-2">{source ? <><audio className="h-10 w-full" controls autoPlay preload="none" src={source.audioUrl} onError={() => { setError('Playback link expired or audio could not load. Open a fresh link.'); setSource(undefined); }} /><a href={source.audioUrl} target="_blank" rel="noreferrer" className="text-xs text-stone-500 underline underline-offset-4">Open audio / download</a></> : <button className="secondary w-full justify-center" onClick={prepare} disabled={busy}><Symbol name="play" className="!h-4 !w-4" />{busy ? 'Opening…' : 'Listen'}</button>}{error && <p role="alert" className="text-xs text-amber-800">{error}</p>}</div>;
-}
-export function History({ track, close }: { track: Track; close: () => void }) {
-  const [items, setItems] = useState<Track[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [busy, setBusy] = useState(true); const [error, setError] = useState('');
-  const load = useCallback(async (next?: string) => { setBusy(true); setError(''); try { const result = await api<Page>(`/tracks/${track.id}/versions${next ? `?cursor=${encodeURIComponent(next)}` : ''}`); setItems(prev => next ? [...prev, ...result.items] : result.items); setCursor(result.nextCursor); } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); } }, [track.id]);
-  useEffect(() => { void load(); }, [load]);
-  return <Modal title={track.title} subtitle="SAVED VERSIONS" close={close}><div className="space-y-4">{items.map((item, index) => <article className="rounded-xl border border-stone-200 p-4" key={item.versionId}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-medium">{date(item.savedAt)}</span>{index === 0 && <span className="pill !text-[9px]">LATEST</span>}</div><h3 className="mt-3 font-medium">{item.title}</h3><p className="my-2 whitespace-pre-wrap text-sm text-stone-500">{item.description || 'No description'}</p><p className="mb-4 text-xs text-stone-400">{item.audio.format.toUpperCase()} · {duration(item.audio.duration)} · {fileSize(item.audio.bytes)}</p><Player track={item} /></article>)}{error && <Notice>{error}</Notice>}{busy && <p role="status" className="text-sm text-stone-500">Loading history…</p>}{cursor && <button disabled={busy} className="secondary w-full justify-center" onClick={() => void load(cursor)}>Load more versions</button>}{error && <button className="secondary" onClick={() => void load()}>Retry</button>}</div></Modal>;
 }
