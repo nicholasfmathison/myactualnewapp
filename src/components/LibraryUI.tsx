@@ -12,7 +12,7 @@ export function Symbol({ name, className = '' }: { name: string; className?: str
   };
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`h-5 w-5 ${className}`}>{paths[name] ?? paths.library}</svg>;
 }
-export function Brand() { return <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d7edb6] text-[#253c30]"><Symbol name="library" /></span><div><span className="text-lg font-semibold tracking-tight">Soundroom</span><span className="block text-[10px] tracking-[.2em] text-stone-400">YOUR PRIVATE COLLECTION</span></div></div>; }
+export function Brand() { return <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d7edb6] text-[#253c30]"><Symbol name="library" /></span><div><span className="text-lg font-semibold tracking-tight">Soundroom</span></div></div>; }
 export function Notice({ children }: { children: ReactNode }) { return <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{children}</p>; }
 export function Modal({ title, subtitle, children, close, wide = false, neutral = false, hideTitle = false }: { title: string; subtitle: string; children: ReactNode; close: () => void; wide?: boolean; neutral?: boolean; hideTitle?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);

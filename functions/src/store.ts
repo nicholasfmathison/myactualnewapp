@@ -19,7 +19,7 @@ export async function present(track: Track) {
   const emulatorToken = host ? (await bucket().file(track.objectPath).getMetadata())[0].metadata?.firebaseStorageDownloadTokens : undefined;
   const url = host ? `http://${host}/v0/b/${bucket().name}/o/${encodeURIComponent(track.objectPath)}?alt=media&token=${emulatorToken}`
     : (await bucket().file(track.objectPath).getSignedUrl({ version: 'v4', action: 'read', expires: new Date(expiresAt) }))[0];
-  const { objectPath: _path, folder: _folder, normalizedTitle: _normalized, ...data } = track;
+  const { objectPath: _path, folder: _folder, normalizedTitle: _normalized, description: _description, ...data } = track as Track & { description?: string };
   return { ...data, audioUrl: url, audioUrlExpiresAt: expiresAt };
 }
 export async function page(uid: string, cursor: unknown, title?: string) {
@@ -39,7 +39,7 @@ export async function page(uid: string, cursor: unknown, title?: string) {
 
 interface SaveInput {
   uid: string; username: string; id?: string; key: string; expectedVersion?: string;
-  details: Pick<Track, 'title' | 'normalizedTitle' | 'description'>;
+  details: Pick<Track, 'title' | 'normalizedTitle'>;
   file?: { buffer: Buffer; audio: AudioInfo };
 }
 export async function save(input: SaveInput): Promise<{ track: Track; unchanged: boolean }> {
@@ -63,7 +63,7 @@ export async function save(input: SaveInput): Promise<{ track: Track; unchanged:
     if (previous && previous.versionId !== expectedVersion) throw new HttpError(409, 'VERSION_CONFLICT', 'This track changed. Reload it before saving.');
     if (!previous && !file) throw new HttpError(400, 'FILE_REQUIRED', 'Choose an audio file.');
     const sameAudio = !file || (file.audio.sha256 === previous?.audio.sha256 && file.audio.filename === previous.audio.filename);
-    if (previous && sameAudio && details.title === previous.title && details.description === previous.description) {
+    if (previous && sameAudio && details.title === previous.title) {
       const result = { track: previous, unchanged: true };
       tx.set(operation, { status: 'complete', requestHash, trackId: previous.id, unchanged: true });
       return { result };

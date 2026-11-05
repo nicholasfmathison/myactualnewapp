@@ -1,6 +1,6 @@
 import { auth } from './firebase';
 export interface AudioInfo { filename: string; format: 'wav' | 'mp3'; bytes: number; duration: number; sampleRate: number | null; channels: number | null }
-export interface Track { id: string; userId: string; title: string; description: string; versionId: string; createdAt: string; savedAt: string; audio: AudioInfo; audioUrl: string; audioUrlExpiresAt: string }
+export interface Track { id: string; userId: string; title: string; versionId: string; createdAt: string; savedAt: string; audio: AudioInfo; audioUrl: string; audioUrlExpiresAt: string }
 export interface Page { items: Track[]; nextCursor: string | null }
 export interface Profile { id: string; username: string; email: string }
 export class ApiError extends Error { constructor(public status: number, public code: string, message: string) { super(message); } }

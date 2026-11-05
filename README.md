@@ -50,11 +50,11 @@ All routes except `GET /v1/health` require `Authorization: Bearer FIREBASE_ID_TO
 | `GET /v1/tracks?title=…&cursor=…` | Full normalized-title match, duplicates distinguished by ID |
 | `GET /v1/tracks/:id` | Current track |
 | `POST /v1/tracks` | Create track |
-| `PUT /v1/tracks/:id` | Replace audio or update title/details |
+| `PUT /v1/tracks/:id` | Replace audio or update title |
 
-Save requests use multipart fields `title` (1–160 characters), `description` (0–5,000), and `file` (required for create; optional for update). Maximum file size is 10,000,000 bytes. Both save routes require a UUID `Idempotency-Key`; updates also require `If-Match` containing the current version UUID. Keep the same key when retrying an unchanged request. A `409 VERSION_CONFLICT` requires reloading the track; a `409 SAVE_IN_PROGRESS` means retry later. Failed/interrupted uploads are cleaned by a scheduled job before the same key can be retried.
+Save requests use multipart fields `title` (1–160 characters) and `file` (required for create; optional for update). Maximum file size is 10,000,000 bytes. Both save routes require a UUID `Idempotency-Key`; updates also require `If-Match` containing the current version UUID. Keep the same key when retrying an unchanged request. A `409 VERSION_CONFLICT` requires reloading the track; a `409 SAVE_IN_PROGRESS` means retry later. Failed/interrupted uploads are cleaned by a scheduled job before the same key can be retried.
 
-Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `description`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim editor; requesting the track refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
+Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim editor; requesting the track refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
 
 ## Trim audio
 

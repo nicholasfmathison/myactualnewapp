@@ -17,8 +17,7 @@ export const slug = (title: string) => normalizeTitle(title).replace(/[^a-z0-9]+
 export function validateDetails(fields: Record<string, string>) {
   const title = fields.title?.trim();
   if (!title || title.length > 160) throw new HttpError(400, 'INVALID_TITLE', 'Use a title between 1 and 160 characters.');
-  if (typeof fields.description !== 'string' || fields.description.length > 5000) throw new HttpError(400, 'INVALID_DESCRIPTION', 'Include a description of at most 5,000 characters (it may be empty).');
-  return { title, normalizedTitle: normalizeTitle(title), description: fields.description.trim() };
+  return { title, normalizedTitle: normalizeTitle(title) };
 }
 export interface AudioInfo {
   filename: string; format: 'wav' | 'mp3'; contentType: string; bytes: number;
@@ -38,7 +37,7 @@ export async function inspectAudio(buffer: Buffer, filename: string): Promise<Au
   } catch { throw new HttpError(415, 'INVALID_AUDIO', 'The audio could not be read. Export a valid WAV or MP3 and try again.'); }
 }
 export interface Track {
-  id: string; userId: string; title: string; normalizedTitle: string; description: string;
+  id: string; userId: string; title: string; normalizedTitle: string;
   folder: string; versionId: string; createdAt: string; savedAt: string; audio: AudioInfo; objectPath: string;
 }
 export function fingerprint(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }

@@ -52,9 +52,9 @@ async function multipart(req: Request): Promise<{ fields: Record<string, string>
     const fields: Record<string, string> = {};
     let file: { buffer: Buffer; filename: string } | undefined;
     let error: Error | undefined;
-    const parser = Busboy({ headers: req.headers, limits: { fileSize: MAX_BYTES + 1, files: 1, fields: 2, parts: 4, fieldSize: 25_000 } });
+    const parser = Busboy({ headers: req.headers, limits: { fileSize: MAX_BYTES + 1, files: 1, fields: 1, parts: 3, fieldSize: 25_000 } });
     parser.on('field', (name, value, info) => {
-      if (!['title', 'description'].includes(name) || name in fields || info.valueTruncated) error = new HttpError(400, 'INVALID_FIELDS', 'Supply title and description once each.');
+      if (!['title'].includes(name) || name in fields || info.valueTruncated) error = new HttpError(400, 'INVALID_FIELDS', 'Supply the title once.');
       fields[name] = value;
     });
     parser.on('file', (name, stream, info) => {
@@ -65,7 +65,7 @@ async function multipart(req: Request): Promise<{ fields: Record<string, string>
       stream.on('end', () => { file = { buffer: Buffer.concat(chunks), filename: info.filename ?? 'audio' }; });
       stream.on('error', reject);
     });
-    for (const event of ['filesLimit', 'fieldsLimit', 'partsLimit']) parser.on(event, () => { error = new HttpError(400, 'INVALID_PARTS', 'Supply one audio file, title, and description.'); });
+    for (const event of ['filesLimit', 'fieldsLimit', 'partsLimit']) parser.on(event, () => { error = new HttpError(400, 'INVALID_PARTS', 'Supply one audio file and title.'); });
     parser.on('error', () => reject(new HttpError(400, 'INVALID_MULTIPART', 'The upload request is incomplete.')));
     parser.on('close', () => error ? reject(error) : resolve({ fields, file }));
     const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;

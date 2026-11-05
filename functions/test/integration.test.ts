@@ -27,8 +27,8 @@ async function request(path: string, init: RequestInit = {}, bearer: string | nu
   const response = await fetch(`${base}/v1${path}`, { ...init, headers: { ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}), ...init.headers } });
   const body = response.status === 204 ? null : await response.json(); return { status: response.status, body };
 }
-async function put(title: string, options: { id?: string; version?: string; key?: string; audio?: Buffer | null; filename?: string; description?: string } = {}) {
-  const form = new FormData(); form.set('title', title); form.set('description', options.description ?? 'A test recording');
+async function put(title: string, options: { id?: string; version?: string; key?: string; audio?: Buffer | null; filename?: string } = {}) {
+  const form = new FormData(); form.set('title', title);
   if (options.audio !== null) form.set('file', new Blob([new Uint8Array(options.audio ?? wav())]), options.filename ?? 'tone.wav');
   return request(`/tracks${options.id ? `/${options.id}` : ''}`, { method: options.id ? 'PUT' : 'POST', body: form,
     headers: { 'Idempotency-Key': options.key ?? randomUUID(), ...(options.version ? { 'If-Match': options.version } : {}) } });
@@ -82,10 +82,13 @@ test('retries return the original save and reuse of a key with different data fa
   assert.equal((await put('Different sound', { key: createKey })).status, 409);
 });
 test('renaming retains the audio and creates no history records', async () => {
+  await db().doc(`users/${uid}/tracks/${original.id}`).update({ description: 'Legacy description' });
+  assert.equal('description' in (await request(`/tracks/${original.id}`)).body, false);
   const before = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
   const result = await put('Renamed sound', { id: original.id, version: original.versionId, audio: null }); assert.equal(result.status, 200); renamed = result.body;
   const current = (await db().doc(`users/${uid}/tracks/${original.id}`).get()).data()!;
   assert.equal(current.objectPath, before.objectPath); assert.notEqual(current.versionId, before.versionId);
+  assert.equal('description' in current, false);
   assert.equal((await db().collection(`users/${uid}/tracks/${original.id}/versions`).limit(1).get()).empty, true);
   assert.equal((await request(`/tracks/${original.id}/versions`)).status, 404);
 });

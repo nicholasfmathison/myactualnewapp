@@ -4,7 +4,7 @@ import { TrimEditor } from './TrimEditor';
 import { Modal, Notice, Symbol } from './LibraryUI';
 
 export function SaveDialog({ track, close, saved }: { track?: Track; close: () => void; saved: () => void }) {
-  const [title, setTitle] = useState(''); const [description, setDescription] = useState('');
+  const [title, setTitle] = useState('');
   const [file, setFile] = useState<File>(); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [trimming, setTrimming] = useState(false);
   const key = useRef(crypto.randomUUID()); const cropHash = useRef('');
@@ -12,13 +12,13 @@ export function SaveDialog({ track, close, saved }: { track?: Track; close: () =
   async function replaceAudio(trimmed: File) {
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await trimmed.arrayBuffer())), byte => byte.toString(16).padStart(2, '0')).join('');
     if (cropHash.current !== hash) { key.current = crypto.randomUUID(); cropHash.current = hash; }
-    const body = new FormData(); body.set('title', track!.title); body.set('description', track!.description); body.set('file', trimmed);
+    const body = new FormData(); body.set('title', track!.title); body.set('file', trimmed);
     await api(`/tracks/${track!.id}`, { method: 'PUT', body, headers: { 'Idempotency-Key': key.current, 'If-Match': track!.versionId } }); saved();
   }
   async function submit(event: FormEvent) {
     event.preventDefault(); setError('');
     if (!file || !file.size || file.size > 10_000_000) { setError('Choose a nonempty WAV or MP3 of 10 MB or less.'); return; }
-    setBusy(true); const body = new FormData(); body.set('title', title); body.set('description', description); body.set('file', file);
+    setBusy(true); const body = new FormData(); body.set('title', title); body.set('file', file);
     try { await api('/tracks', { method: 'POST', body, headers: { 'Idempotency-Key': key.current } }); saved(); }
     catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
   }
@@ -29,7 +29,6 @@ export function SaveDialog({ track, close, saved }: { track?: Track; close: () =
       <label className="upload-zone"><Symbol name="upload" /><span>{file?.name ?? 'Choose your audio file'}</span><span className="text-xs text-stone-400">WAV or MP3 · Up to 10 MB</span><input aria-label="Audio file" className="mt-3 block w-full text-xs" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" onChange={e => { setFile(e.target.files?.[0]); changed(); }} /></label>
       {file && <button type="button" className="secondary" onClick={() => setTrimming(true)}><Symbol name="trim" />Crop audio</button>}
       <label className="field-label">Title<input className="field" value={title} maxLength={160} required onChange={e => { setTitle(e.target.value); changed(); }} /></label>
-      <label className="field-label">Description (optional)<textarea className="field min-h-20" value={description} maxLength={5000} onChange={e => { setDescription(e.target.value); changed(); }} /></label>
     </fieldset>
     {error && <Notice>{error}</Notice>}
     <div className="flex justify-end gap-3"><button type="button" className="secondary" disabled={busy} onClick={close}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Add sound'}</button></div>
@@ -42,7 +41,7 @@ export function TrackTitle({ track, saved }: { track: Track; saved: (updated: Tr
   async function rename(event: FormEvent) {
     event.preventDefault(); if (!value.trim()) return;
     if (value.trim() === track.title) { setEditing(false); return; }
-    setBusy(true); setError(''); const body = new FormData(); body.set('title', value.trim()); body.set('description', track.description);
+    setBusy(true); setError(''); const body = new FormData(); body.set('title', value.trim());
     try { const updated = await api<Track>(`/tracks/${track.id}`, { method: 'PUT', body, headers: { 'Idempotency-Key': key.current, 'If-Match': track.versionId } }); saved(updated); setEditing(false); }
     catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
   }
