@@ -15,7 +15,10 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
   if (!response.ok) throw new ApiError(response.status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'The request failed.');
   return body as T;
 }
-export const duration = (seconds: number) => seconds < 1 ? `${seconds.toFixed(2)}s` : `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+export const duration = (seconds: number) => {
+  const ms = Math.round(seconds * 1000);
+  return ms < 60000 ? `${(ms / 1000).toFixed(3)}s` : `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(3).padStart(6, '0')}`;
+};
 export const fileSize = (bytes: number) => bytes < 1_000_000 ? `${(bytes / 1000).toFixed(1)} KB` : `${(bytes / 1e6).toFixed(2)} MB`;
 export const date = (value: string) => new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 export function errorMessage(error: unknown) {

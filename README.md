@@ -31,6 +31,7 @@ Generated environment files, credentials, emulator logs, dependencies, and build
 npm run check
 npm run build
 npm run build:api
+npm run test:audio
 # Stop separately running emulators before this command:
 npm run test:integration
 ```
@@ -55,7 +56,17 @@ All routes except `GET /v1/health` require `Authorization: Bearer FIREBASE_ID_TO
 
 Save requests use multipart fields `title` (1–160 characters), `description` (0–5,000), and `file` (required for create; optional for update). Maximum file size is 10,000,000 bytes. Both save routes require a UUID `Idempotency-Key`; updates also require `If-Match` containing the current version UUID. Keep the same key when retrying an unchanged request. A `409 VERSION_CONFLICT` requires reloading the track; a `409 SAVE_IN_PROGRESS` means retry later. Failed/interrupted uploads are cleaned by a scheduled job before the same key can be retried.
 
-Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `description`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen; requesting a version refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
+Lists return `{items, nextCursor}`. Track responses contain `id`, `userId`, `versionId`, `title`, `description`, `createdAt`, `savedAt`, audio metadata, `audioUrl`, and `audioUrlExpiresAt`. URLs expire after 15 minutes in production. Audio is loaded only on Listen or when opening the trim editor; requesting a version refreshes its URL. Signed URLs are temporary bearer access, so don't share them unless you intend to share that recording. Errors use `{error: {code, message}}`.
+
+## Trim audio
+
+Choose the scissors button on a sound card, or **Trim audio & inspect waveform** when adding/replacing audio. Drag the start/end markers or enter seconds in 0.001-second increments. **Preview selection** plays only the kept range. **Apply trim** prepares replacement audio; **Save version** commits it through the existing versioned API. Cancelling does not save a version.
+
+The editor shows a filled, sample-based waveform centered on zero, with a time grid and dimmed regions outside the crop. Zoomed-out views retain positive/negative sample extrema so brief transients stay visible; close zoom reveals individual oscillations. Stereo channels are combined by extrema, not averaged, to avoid phase cancellation. Use the 20 ms zoom window and **Inspect (ms)** for fine inspection. Signal level (RMS) and peak percentages are measured per millisecond relative to digital full scale; they are not physical or perceptually weighted loudness. There is no decibel chart.
+
+Mono and stereo WAV/MP3 inputs are decoded locally using Web Audio. Trims export 16-bit PCM WAV, including MP3 input, without normalization, fades or pitch changes. Cut boundaries round to the nearest decoded sample. Existing tracks use their recorded sample rate; newly selected files use the browser audio context's sample rate, shown in the editor. Output must fit the existing 10 MB limit. Saved originals remain in version history; unsaved new uploads are not archived. The audio tests check RMS/peak math, stereo preservation, sample boundaries, WAV metadata and output limits.
+
+Web Audio references: [decoding and resampling](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/decodeAudioData), [bounded playback](https://developer.mozilla.org/en-US/docs/Web/API/AudioBufferSourceNode/start).
 
 ## Storage behavior
 
